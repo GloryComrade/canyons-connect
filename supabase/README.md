@@ -11,11 +11,11 @@ Vault and are used server-side only.
 supabase/
   config.toml                 # CLI config (per-function verify_jwt)
   env.example                 # secrets template → copy to .env (gitignored)
-  migrations/
-    0001_schema.sql           # enums, tables, triggers
-    0002_rls.sql              # row-level security on every table
-    0003_storage.sql          # private photo-drops bucket + policies
-    0004_seed_schoolwide.sql  # shared content (clubs, news, calendar)
+  migrations/                 # timestamped; applied in order by `db push`
+    20261011000001_schema.sql           # enums, tables, triggers
+    20261011000002_rls.sql              # row-level security on every table
+    20261011000003_storage.sql          # private photo-drops bucket + policies
+    20261011000004_seed_schoolwide.sql  # shared content (clubs, news, calendar)
   functions/
     _shared/                  # cors, admin client, crypto, provider config
     oauth-start/              # builds provider authorize URL (signed state)
