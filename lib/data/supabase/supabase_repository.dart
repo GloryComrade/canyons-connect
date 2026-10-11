@@ -10,10 +10,10 @@ import '../mock/reactive_store.dart';
 /// Edge Functions for the integration/sync server logic.
 ///
 /// Security notes:
-///  * Integration status is read from the `integration_status` view, which
-///    exposes only non-secret columns. The base `integrations` table (tokens,
-///    encrypted credentials) is never selectable by clients — Edge Functions
-///    with the service role are the only readers.
+///  * The `integrations` table holds only non-secret status columns and is
+///    readable by its owner via RLS. Tokens and encrypted credentials live in
+///    a separate `integration_secrets` table with NO client policies, so only
+///    Edge Functions (service role) can ever read them.
 ///  * All table access is RLS-scoped to `auth.uid()`.
 class SupabaseRepository implements HubRepository {
   SupabaseRepository(this._client)
@@ -219,8 +219,20 @@ class SupabaseRepository implements HubRepository {
     return (rows as List).map((e) => PhotoEvent.fromMap(e)).toList();
   }
 
+  /// Joins the viewer to the event drop (participant-scoped RLS) — opening a
+  /// drop is how a student joins it.
+  Future<void> _joinPhotoEvent(String eventId) async {
+    try {
+      await _client.from('photo_participants').upsert(
+        {'event_id': eventId, 'user_id': currentUserId},
+        onConflict: 'event_id,user_id',
+      );
+    } catch (_) {/* already a participant */}
+  }
+
   @override
   Future<List<Photo>> getPhotos(String eventId) async {
+    await _joinPhotoEvent(eventId);
     final rows = await _client
         .from('photos')
         .select()
@@ -250,6 +262,7 @@ class SupabaseRepository implements HubRepository {
 
   @override
   Future<void> addPhoto(String eventId, Uint8List bytes, {String? caption}) async {
+    await _joinPhotoEvent(eventId);
     final path = '$eventId/${DateTime.now().millisecondsSinceEpoch}.jpg';
     await _client.storage.from(_photoBucket).uploadBinary(
           path,
@@ -277,7 +290,7 @@ class SupabaseRepository implements HubRepository {
   Future<void> _refreshIntegrations() async {
     try {
       final rows = await _client
-          .from('integration_status') // view: non-secret columns only
+          .from('integrations') // non-secret status columns only
           .select()
           .eq('user_id', currentUserId);
       _integrations.value =
