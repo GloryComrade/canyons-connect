@@ -9,16 +9,20 @@ import 'firebase_options.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Initialize Firebase only when configured (flutterfire configure fills in
-  // real options). Without it, the app runs on the in-memory mock data layer.
-  try {
-    final options = DefaultFirebaseOptions.currentPlatform;
-    if (options.apiKey.isNotEmpty) {
-      await Firebase.initializeApp(options: options);
-      AppConfig.firebaseInitialized = true;
+  // Initialize Firebase only when configured AND not forced into mock mode.
+  // A timeout guarantees a stalled init (e.g. flaky network/proxy) can never
+  // block the first frame — the app falls back to mock and still renders.
+  if (!AppConfig.forceMock) {
+    try {
+      final options = DefaultFirebaseOptions.currentPlatform;
+      if (options.apiKey.isNotEmpty) {
+        await Firebase.initializeApp(options: options)
+            .timeout(const Duration(seconds: 8));
+        AppConfig.firebaseInitialized = true;
+      }
+    } catch (_) {
+      // Not configured / init failed / timed out → mock mode.
     }
-  } catch (_) {
-    // Not configured / init failed → fall back to mock mode.
   }
 
   runApp(const ProviderScope(child: CanyonsApp()));

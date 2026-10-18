@@ -16,10 +16,12 @@ class AppConfig {
   /// Set by main() once Firebase has been initialized with real options.
   static bool firebaseInitialized = false;
 
-  static const bool _forceMock =
+  /// Force mock mode even when Firebase is configured:
+  /// `--dart-define=USE_MOCK_DATA=true`.
+  static const bool forceMock =
       bool.fromEnvironment('USE_MOCK_DATA', defaultValue: false);
 
   /// Whether to use the mock data layer. Mock is used when forced, or whenever
-  /// Firebase isn't configured.
-  static bool get useMockData => _forceMock || !firebaseInitialized;
+  /// Firebase isn't configured / failed to initialize.
+  static bool get useMockData => forceMock || !firebaseInitialized;
 }
