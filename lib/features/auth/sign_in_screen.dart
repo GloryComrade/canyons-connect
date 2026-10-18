@@ -140,7 +140,7 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
                         Expanded(
                           child: Text(
                             'Demo mode — any sign-in opens the app with sample data. '
-                            'Add Supabase keys to connect the real backend.',
+                            'Run flutterfire configure to connect the real backend.',
                             style: AppType.body.copyWith(color: c.textTertiary),
                           ),
                         ),

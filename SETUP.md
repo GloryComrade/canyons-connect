@@ -1,80 +1,89 @@
-# Going live with Supabase
+# Going live with Firebase
 
 The app already runs in demo mode (`flutter run -d chrome`). To connect the real
-backend, do the two authenticated steps below — the rest is scripted.
+backend, do the authenticated steps below — the rest is scripted.
 
 What's already prepared for you:
-- ✅ Supabase CLI installed (`supabase 2.120.0`)
-- ✅ Server secrets generated in `supabase/.env` (gitignored): credential
-  encryption key, OAuth state-signing secret, cron secret, Canvas webhook secret
-- ✅ Migrations in Supabase timestamp format, ready for `db push`
-- ✅ `scripts/setup_supabase.sh` — links/creates the project, pushes the schema,
-  sets secrets, deploys functions, and writes `env.json`
-- ✅ `scripts/run.sh` — runs the app against `env.json` (or mock mode if absent)
+- ✅ Firebase packages wired (`firebase_core`, `firebase_auth`, `cloud_firestore`,
+  `firebase_storage`, `cloud_functions`) and a `FirebaseRepository` behind the
+  same `HubRepository` the UI uses
+- ✅ Firestore Security Rules (the RLS equivalent), Storage rules, and Cloud
+  Functions (auth trigger, OAuth, credential connect, sync, scheduler, webhook,
+  seed) — **compiled and verified** (`tsc` clean)
+- ✅ Function secrets generated in `firebase/functions/.env` (gitignored):
+  credential-encryption key, OAuth state-signing secret, seed secret, Canvas
+  webhook secret
+- ✅ `scripts/setup_firebase.sh` — configures FlutterFire, builds + deploys
+  everything; `scripts/run.sh` runs the app
 
-## Step 1 — authenticate the CLI (one time, opens a browser)
-
-```bash
-supabase login
-```
-
-## Step 2 — create/link the project and deploy everything
-
-Create a brand-new project:
+## Step 0 — install the two CLIs (one time)
 
 ```bash
-CREATE=1 scripts/setup_supabase.sh
-# prints the project ref + generated DB password (save it) and finishes setup
+npm install -g firebase-tools
+dart pub global activate flutterfire_cli   # ensure ~/.pub-cache/bin is on PATH
 ```
 
-**or** if you already made a project in the dashboard:
+## Step 1 — authenticate (one time, opens a browser)
 
 ```bash
-scripts/setup_supabase.sh <project-ref>
-# optionally: SUPABASE_DB_PASSWORD=... scripts/setup_supabase.sh <project-ref>
+firebase login
 ```
 
-This applies the schema + RLS + storage + seed, sets the Edge Function secrets,
-deploys all seven functions, and writes `env.json` (SUPABASE_URL + anon key).
+## Step 2 — configure + deploy everything
 
-## Step 3 — enable Google sign-in (dashboard)
+Use an existing project, or create one:
 
-Auth → Providers → enable **Google** (and **Email**). Add redirect URLs:
-- your web origin (e.g. `http://localhost:*` for dev)
-- `canyonsconnect://login-callback` (mobile/desktop deep link)
+```bash
+cd "/Users/ryancheng/Downloads/the test code project "
+scripts/setup_firebase.sh <your-project-id>
+# or create a new project first:
+CREATE=1 scripts/setup_firebase.sh canyons-connect-<something-unique>
+```
 
-(Create the Google OAuth client in Google Cloud Console; paste its client
-id/secret into the Supabase Google provider.)
+This runs `flutterfire configure` (writes `lib/firebase_options.dart` + platform
+config), installs and builds the functions, and deploys Firestore rules, Storage
+rules, and all Cloud Functions.
+
+## Step 3 — finish in the Firebase console
+
+- **Authentication → Sign-in method →** enable **Google** (and Email/Password).
+- If prompted, **create the Firestore database** (production mode) and the
+  default **Storage bucket**.
+- **Seed school content** (clubs, news, newsletters, calendar, photo events):
+  ```bash
+  BASE="https://us-central1-<your-project-id>.cloudfunctions.net"
+  curl "$BASE/seed?secret=$(grep ^SEED_SECRET firebase/functions/.env | cut -d= -f2)"
+  ```
 
 ## Step 4 — run against the live backend
 
 ```bash
-scripts/run.sh                 # chrome; uses env.json automatically
-# or explicitly:
-flutter run -d chrome --dart-define-from-file=env.json
+flutter run -d chrome        # or scripts/run.sh
 ```
 
-Sign in with Google → a `profiles` row is created automatically → you land on
-the Today dashboard. Until you connect Canvas/Skyward/etc. from the Connections
-screen, those sections show their empty/connect states (schedule, grades, and
-assignments populate after those syncs).
-
-## Step 5 — enable the 1-minute sync cron
-
-In the SQL editor, enable `pg_cron` + `pg_net` and schedule `sync-scheduled`
-(see `supabase/README.md` for the exact `cron.schedule(...)` snippet using your
-ref and `CRON_SECRET` from `supabase/.env`).
+Sign in with Google → the `onUserCreate` function creates your profile → you land
+on the Today dashboard. Schedule, grades, and assignments populate once you
+connect Canvas/Skyward/etc. from the Connections screen.
 
 ## Provider credentials (fill as you obtain them)
 
-Add Canvas/GroupMe/Skyward/ManageBac values to `supabase/.env`, then re-push:
+Add Canvas/GroupMe/Skyward/ManageBac values to `firebase/functions/.env`, then
+redeploy the functions:
 
 ```bash
-supabase secrets set --env-file supabase/.env   # (the script filters empties)
+firebase deploy --only functions
 ```
 
 - **Canvas** — developer key from the district Canvas admin → `CANVAS_CLIENT_ID/SECRET`
 - **GroupMe** — app at developers.groupme.com → `GROUPME_CLIENT_ID/SECRET`
 - **Skyward** — district-granted API (`SKYWARD_API_*`) or students use login sync
 - **ManageBac** — API token if the plan exposes one (`MANAGEBAC_API_*`)
-```
+
+> For production, prefer `firebase functions:secrets:set <NAME>` over `.env` for
+> the client secrets.
+
+## Scheduled sync (every 1 minute)
+
+The `syncScheduled` function is deployed with an `every 1 minutes` Pub/Sub
+schedule automatically — no extra cron setup. (Scheduled functions require the
+Blaze plan.)

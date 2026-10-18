@@ -1,0 +1,61 @@
+rules_version = '2';
+
+// Canyons Connect — Firestore Security Rules (the Firebase equivalent of RLS).
+// Users reach only their own data; school-wide content is read-only; Photo Drop
+// is scoped to participants; integration secrets are never client-readable.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+    function isOwner(uid) {
+      return request.auth != null && request.auth.uid == uid;
+    }
+    function isParticipant(eventId) {
+      return request.auth != null &&
+        exists(/databases/$(database)/documents/photo_events/$(eventId)/participants/$(request.auth.uid));
+    }
+
+    // --- Per-user private data (profile + all subcollections) ---
+    // assignments, grades, class_periods, events, notifications, memberships,
+    // and integration STATUS docs all live under here, owner-only.
+    match /users/{uid} {
+      allow read, write: if isOwner(uid);
+      match /{document=**} {
+        allow read, write: if isOwner(uid);
+      }
+    }
+
+    // --- School-wide content: read-only to signed-in users ---
+    // (writes happen server-side via the Admin SDK, which bypasses rules)
+    match /clubs/{id}         { allow read: if signedIn(); allow write: if false; }
+    match /news_items/{id}    { allow read: if signedIn(); allow write: if false; }
+    match /newsletters/{id}   { allow read: if signedIn(); allow write: if false; }
+    match /school_events/{id} { allow read: if signedIn(); allow write: if false; }
+
+    // --- Photo Drop ---
+    match /photo_events/{eventId} {
+      allow read: if signedIn();
+      allow write: if false; // events created server-side
+
+      match /participants/{uid} {
+        allow read: if signedIn();
+        allow create, delete: if isOwner(uid);
+      }
+      match /photos/{photoId} {
+        allow read: if isParticipant(eventId);
+        allow create: if isParticipant(eventId)
+          && request.resource.data.uploader_id == request.auth.uid;
+        allow delete: if signedIn() && resource.data.uploader_id == request.auth.uid;
+      }
+    }
+
+    // --- Integration secrets: NEVER client-accessible ---
+    // Tokens / encrypted credentials live here; only Cloud Functions (Admin SDK)
+    // can read or write them.
+    match /integration_secrets/{uid}/{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

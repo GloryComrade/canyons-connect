@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Run Canyons Connect against the live Supabase backend using env.json.
-# Falls back to mock mode (no backend) if env.json is missing.
+# Run Canyons Connect. Firebase config is compiled in via lib/firebase_options.dart
+# (run `flutterfire configure` to connect a real project). Until then it runs in
+# mock/demo mode automatically.
 #
 # Examples:
 #   scripts/run.sh                 # chrome
@@ -10,13 +11,6 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 ARGS=("$@")
-# Default to chrome if no device flag was passed.
 case " ${ARGS[*]} " in *" -d "*) ;; *) ARGS+=(-d chrome);; esac
 
-if [ -f env.json ]; then
-  echo "Running with live backend (env.json)"
-  exec flutter run --dart-define-from-file=env.json "${ARGS[@]}"
-else
-  echo "No env.json found — running in mock/demo mode."
-  exec flutter run "${ARGS[@]}"
-fi
+exec flutter run "${ARGS[@]}"

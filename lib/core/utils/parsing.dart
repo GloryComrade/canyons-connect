@@ -4,6 +4,11 @@ library;
 DateTime? asDateOrNull(dynamic v) {
   if (v == null) return null;
   if (v is DateTime) return v.toLocal();
+  // Firestore Timestamp (duck-typed to avoid importing cloud_firestore here).
+  try {
+    final d = (v as dynamic).toDate();
+    if (d is DateTime) return d.toLocal();
+  } catch (_) {/* not a Timestamp */}
   return DateTime.tryParse(v.toString())?.toLocal();
 }
 

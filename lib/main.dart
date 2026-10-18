@@ -1,21 +1,24 @@
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'app.dart';
 import 'core/config/app_config.dart';
+import 'firebase_options.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Initialize Supabase only when configured. Without keys the app runs on the
-  // in-memory mock data layer (see AppConfig.useMockData).
-  if (AppConfig.hasSupabase) {
-    await Supabase.initialize(
-      url: AppConfig.supabaseUrl,
-      // The anon key is Supabase's publishable key — safe in clients; RLS guards data.
-      publishableKey: AppConfig.supabaseAnonKey,
-    );
+  // Initialize Firebase only when configured (flutterfire configure fills in
+  // real options). Without it, the app runs on the in-memory mock data layer.
+  try {
+    final options = DefaultFirebaseOptions.currentPlatform;
+    if (options.apiKey.isNotEmpty) {
+      await Firebase.initializeApp(options: options);
+      AppConfig.firebaseInitialized = true;
+    }
+  } catch (_) {
+    // Not configured / init failed → fall back to mock mode.
   }
 
   runApp(const ProviderScope(child: CanyonsApp()));

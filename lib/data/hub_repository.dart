@@ -4,14 +4,14 @@ import '../models/models.dart';
 
 /// The single data contract the UI depends on. Two implementations exist:
 ///
-///  * [MockRepository] — in-memory sample data, used when Supabase isn't
+///  * [MockRepository] — in-memory sample data, used when Firebase isn't
 ///    configured, so the app runs end-to-end for demos and UI work.
-///  * [SupabaseRepository] — backed by Postgres + Realtime + Storage, selected
-///    automatically once SUPABASE_URL / SUPABASE_ANON_KEY are provided.
+///  * `FirebaseRepository` — backed by Cloud Firestore + Storage + Functions,
+///    selected automatically once `flutterfire configure` has been run.
 ///
-/// `watch*` methods return live streams (Realtime in Supabase; broadcast in
-/// mock) so the Now card, Due Soon, Grades, Inbox, Clubs, and Photo Drop update
-/// without a manual refresh.
+/// `watch*` methods return live streams (Firestore snapshots in Firebase;
+/// broadcast in mock) so the Now card, Due Soon, Grades, Inbox, Clubs, and
+/// Photo Drop update without a manual refresh.
 abstract class HubRepository {
   String get currentUserId;
 

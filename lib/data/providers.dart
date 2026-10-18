@@ -1,13 +1,16 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:supabase_flutter/supabase_flutter.dart' hide AuthUser;
 
 import '../core/config/app_config.dart';
 import '../models/models.dart';
 import 'auth/auth_service.dart';
+import 'firebase/firebase_repository.dart';
 import 'hub_repository.dart';
 import 'mock/mock_repository.dart';
-import 'supabase/supabase_repository.dart';
 
 // ---------------------------------------------------------------------------
 // Auth
@@ -15,7 +18,7 @@ import 'supabase/supabase_repository.dart';
 
 final authServiceProvider = Provider<AuthService>((ref) {
   if (AppConfig.useMockData) return MockAuthService();
-  return SupabaseAuthService(Supabase.instance.client);
+  return FirebaseAuthService(FirebaseAuth.instance);
 });
 
 /// Emits the signed-in user (or null). The router listens to this.
@@ -37,7 +40,12 @@ final repositoryProvider = Provider<HubRepository>((ref) {
   }
   // Rebuild the repository when the auth session changes.
   ref.watch(authStateProvider);
-  return SupabaseRepository(Supabase.instance.client);
+  return FirebaseRepository(
+    FirebaseFirestore.instance,
+    FirebaseAuth.instance,
+    FirebaseStorage.instance,
+    FirebaseFunctions.instance,
+  );
 });
 
 // ---------------------------------------------------------------------------

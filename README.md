@@ -6,13 +6,13 @@ school news. It consolidates **Canvas, Skyward, ManageBac, ParentSquare,
 GroupMe, the School Clubs site, and The Utah View** into one clean dashboard.
 
 - **Frontend:** Flutter (one Dart codebase → Web, iOS, Android, Windows, macOS)
-- **Backend:** Supabase (Postgres + Auth + Realtime + Storage + Edge Functions)
+- **Backend:** Firebase (Cloud Firestore + Auth + Storage + Cloud Functions)
 - **Repo:** https://github.com/GloryComrade/canyons-connect
 
 > **Runs out of the box.** With no backend configured the app boots on an
 > in-memory **mock data layer** (student "Maya Ramirez") so every screen is
-> fully explorable. Add Supabase keys to switch to the live backend — no code
-> changes.
+> fully explorable. Run `flutterfire configure` to switch to the live Firebase
+> backend — no code changes.
 
 ---
 
@@ -24,14 +24,13 @@ flutter pub get
 # Run in demo/mock mode (no backend needed):
 flutter run -d chrome          # or: macos / windows / ios / android
 
-# Run against a real Supabase project:
-flutter run -d chrome \
-  --dart-define=SUPABASE_URL=https://<ref>.supabase.co \
-  --dart-define=SUPABASE_ANON_KEY=<publishable-anon-key>
+# Connect a real Firebase project, then just run normally:
+#   npm install -g firebase-tools && dart pub global activate flutterfire_cli
+#   firebase login && flutterfire configure
+#   flutter run -d chrome
 ```
 
-For many `--dart-define`s, put them in a JSON file and use
-`--dart-define-from-file=env.json` (that file is gitignored).
+See **[SETUP.md](SETUP.md)** for the full go-live walkthrough (one script).
 
 ### Build for each platform
 
@@ -59,17 +58,17 @@ flutter build windows       # Windows .exe (package with msix/Inno Setup)
 | Bell schedule engine (live current period, countdown, special days) | ✅ unit-tested |
 | Schedule, Grades, Inbox, Clubs, Utah View, Photo Drop, Profile, Connections, Search | ✅ |
 | Auth (Google primary + email fallback) & routing with auth guard | ✅ |
-| Data layer: repository interface + mock + Supabase (Realtime/Storage/Functions) | ✅ |
-| Supabase schema + RLS + storage + Edge Functions | ✅ |
-| Canvas sync (REST) | ✅ implemented in `sync-now` |
+| Data layer: repository interface + mock + Firebase (Firestore/Storage/Functions) | ✅ |
+| Firestore Security Rules + Storage rules + Cloud Functions | ✅ compiled (`tsc` clean) |
+| Canvas sync (REST) | ✅ implemented in `syncNow` |
 | Skyward / ManageBac / GroupMe / ParentSquare / Clubs sync | ⚙️ scaffolded with the exact wiring + TODOs (need provider credentials) |
 
 ### Needs your accounts/approvals to go fully live
 These can't be provisioned from source alone; the wiring is in place for each:
-- A Supabase project (URL + anon key, service-role key for functions)
+- A Firebase project (`flutterfire configure`) on the Blaze plan (for Functions)
 - Canvas developer key (district Canvas admin)
 - Skyward district API approval, or a test account for login-based sync
-- GroupMe OAuth app; ManageBac API/ICS; ParentSquare & Clubs feed access
+- GroupMe/ManageBac/ParentSquare/Clubs access
 - Apple/Google/Microsoft developer accounts + signing certs for store submission
 
 ---
@@ -78,13 +77,13 @@ These can't be provisioned from source alone; the wiring is in place for each:
 
 ```
 Flutter clients (web/iOS/Android/Windows/macOS)
-        │  supabase_flutter: Auth · Postgres · Realtime · Storage
+        │  firebase_auth · cloud_firestore · firebase_storage · cloud_functions
         ▼
-Supabase project
-  Postgres (RLS on every table)  ← system of record
-  Realtime  → live Now card / Due Soon / Grades / Inbox / Clubs / Photos
-  Storage   → Photo Drop (private, signed URLs)
-  Edge Functions (service role) ← the ONLY holder of integration secrets
+Firebase project
+  Cloud Firestore (Security Rules per collection)  ← system of record
+  Snapshots → live Now card / Due Soon / Grades / Inbox / Clubs / Photos
+  Storage    → Photo Drop (participant-scoped, download URLs)
+  Cloud Functions (Admin SDK) ← the ONLY holder of integration secrets
         │
         ▼
 Canvas · Skyward · ManageBac · GroupMe · ParentSquare · Clubs · District site
@@ -92,27 +91,27 @@ Canvas · Skyward · ManageBac · GroupMe · ParentSquare · Clubs · District s
 
 - **`lib/core`** — config, theme/design-system tokens, router, utils
 - **`lib/design_system`** — approved components (button, card, chip, segmented, …)
-- **`lib/models`** — domain models mirroring the Postgres schema
-- **`lib/data`** — `HubRepository` interface, `MockRepository`, `SupabaseRepository`, auth, Riverpod providers
+- **`lib/models`** — domain models mirroring the Firestore documents
+- **`lib/data`** — `HubRepository` interface, `MockRepository`, `FirebaseRepository`, auth, Riverpod providers
 - **`lib/features`** — one folder per screen/feature
 - **`lib/shell`** — responsive navigation shell
-- **`supabase/`** — migrations, RLS, storage, Edge Functions (see `supabase/README.md`)
+- **`firebase/`** — Firestore rules, Storage rules, Cloud Functions (see `firebase/README.md`)
 
 State management is **Riverpod**; navigation is **go_router** with an auth
 redirect and a `StatefulShellRoute` over the eight primary destinations.
 
 ### Mock vs. live
-`AppConfig.useMockData` is true whenever Supabase isn't configured (or
-`--dart-define=USE_MOCK_DATA=true`). The UI depends only on `HubRepository`, so
-switching backends changes no screen code.
+`AppConfig.useMockData` is true until Firebase is configured (empty
+`firebase_options.dart`) or when `--dart-define=USE_MOCK_DATA=true`. The UI
+depends only on `HubRepository`, so switching backends changes no screen code.
 
 ---
 
 ## Integrations & sync
 
 Connect each app **once** from the Connections screen; the hub stores the
-long-lived refresh token (OAuth) or encrypted credentials (login-based) and
-refreshes access tokens server-side before each sync.
+long-lived refresh token (OAuth) or encrypted credentials (login-based) in a
+server-only `integration_secrets` collection and refreshes before each sync.
 
 | Provider | Link method | Pulls |
 |----------|-------------|-------|
@@ -123,10 +122,11 @@ refreshes access tokens server-side before each sync.
 | ParentSquare | Feed/scrape | posts → Inbox |
 | School Clubs | Feed/scrape | rosters, meetings, posts |
 
-**Sync engine:** webhooks first (Canvas, GroupMe → instant); 1-minute scheduled
-poll for the rest; pull-to-refresh calls `sync-now`; Realtime pushes every
-change to all clients. Full secret/OAuth/credential setup is in
-[`supabase/README.md`](supabase/README.md) and [`supabase/env.example`](supabase/env.example).
+**Sync engine:** webhooks first (Canvas → instant); a 1-minute scheduled
+function (`syncScheduled`) polls the rest; pull-to-refresh calls `syncNow`;
+Firestore snapshots push every change to all clients. Full secret/OAuth/credential
+setup is in [`firebase/README.md`](firebase/README.md) and
+[`firebase/functions/env.example`](firebase/functions/env.example).
 
 ---
 
@@ -154,13 +154,14 @@ flutter test           # unit (bell schedule, date utils) + widget smoke test
 ```
 
 Verified during development: `flutter analyze` clean, core-logic checks pass,
-and `flutter build web` succeeds (Wasm-compatible).
+`flutter build web` succeeds (Wasm-compatible), and the Cloud Functions compile
+(`tsc` clean).
 
 ---
 
 ## Source control
 
 Private repo at **https://github.com/GloryComrade/canyons-connect**, committed
-feature-by-feature (scaffold → design system/data → app UI → backend → docs).
-Secrets, env files, and build artifacts are gitignored; **no keys are ever
-committed**.
+feature-by-feature. Secrets, env files, `node_modules`, and build artifacts are
+gitignored; **no keys are ever committed** (the Firebase client config in
+`firebase_options.dart` is public by design and safe to commit).

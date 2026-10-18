@@ -1,9 +1,7 @@
 import 'dart:async';
 
+import 'package:firebase_auth/firebase_auth.dart' as fb;
 import 'package:flutter/foundation.dart';
-import 'package:supabase_flutter/supabase_flutter.dart' as sb;
-
-import '../../core/config/app_config.dart';
 
 /// Minimal auth identity surfaced to the app.
 class AuthUser {
@@ -25,7 +23,7 @@ abstract class AuthService {
   Future<void> signOut();
 }
 
-/// Demo auth used when Supabase isn't configured. Starts signed out so the
+/// Demo auth used when Firebase isn't configured. Starts signed out so the
 /// sign-in screen is exercised; "Google" immediately signs in as the demo user.
 class MockAuthService implements AuthService {
   final _controller = StreamController<AuthUser?>.broadcast();
@@ -68,51 +66,54 @@ class MockAuthService implements AuthService {
   }
 }
 
-/// Supabase-backed auth. Google OAuth works uniformly across platforms via the
-/// Supabase-hosted redirect; the session is persisted by supabase_flutter in
-/// each platform's secure store.
-class SupabaseAuthService implements AuthService {
-  SupabaseAuthService(this._client);
-  final sb.SupabaseClient _client;
+/// Firebase-backed auth. Google works via Firebase Auth's provider flow (popup
+/// on web, native provider sheet on mobile). The session is persisted by
+/// firebase_auth per platform.
+class FirebaseAuthService implements AuthService {
+  FirebaseAuthService(this._auth);
+  final fb.FirebaseAuth _auth;
 
-  AuthUser? _map(sb.User? u) {
+  AuthUser? _map(fb.User? u) {
     if (u == null) return null;
-    final meta = u.userMetadata ?? const {};
     return AuthUser(
-      id: u.id,
+      id: u.uid,
       email: u.email,
-      name: (meta['full_name'] ?? meta['name'])?.toString(),
-      avatarUrl: (meta['avatar_url'] ?? meta['picture'])?.toString(),
+      name: u.displayName,
+      avatarUrl: u.photoURL,
     );
   }
 
   @override
-  AuthUser? get currentUser => _map(_client.auth.currentUser);
+  AuthUser? get currentUser => _map(_auth.currentUser);
 
   @override
   Stream<AuthUser?> authState() async* {
     yield currentUser;
-    yield* _client.auth.onAuthStateChange.map((e) => _map(e.session?.user));
+    yield* _auth.authStateChanges().map(_map);
   }
 
   @override
   Future<void> signInWithGoogle() async {
-    await _client.auth.signInWithOAuth(
-      sb.OAuthProvider.google,
-      redirectTo: kIsWeb ? null : AppConfig.authRedirectScheme,
-    );
+    final provider = fb.GoogleAuthProvider()
+      ..addScope('email')
+      ..setCustomParameters({'prompt': 'select_account'});
+    if (kIsWeb) {
+      await _auth.signInWithPopup(provider);
+    } else {
+      await _auth.signInWithProvider(provider);
+    }
   }
 
   @override
   Future<void> signInWithEmail(String email, String password) async {
-    await _client.auth.signInWithPassword(email: email, password: password);
+    await _auth.signInWithEmailAndPassword(email: email, password: password);
   }
 
   @override
   Future<void> signUpWithEmail(String email, String password) async {
-    await _client.auth.signUp(email: email, password: password);
+    await _auth.createUserWithEmailAndPassword(email: email, password: password);
   }
 
   @override
-  Future<void> signOut() => _client.auth.signOut();
+  Future<void> signOut() => _auth.signOut();
 }
