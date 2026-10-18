@@ -20,11 +20,41 @@ import '../hub_repository.dart';
 ///    the rules deny to all clients. The client sees only status docs.
 class FirebaseRepository implements HubRepository {
   FirebaseRepository(this._db, FirebaseAuth auth, this._storage, this._functions)
-      : currentUserId = auth.currentUser?.uid ?? '';
+      : currentUserId = auth.currentUser?.uid ?? '',
+        _displayName = auth.currentUser?.displayName,
+        _email = auth.currentUser?.email,
+        _avatarUrl = auth.currentUser?.photoURL {
+    // Create the profile doc on first sign-in if it doesn't exist yet. The
+    // onUserCreate Cloud Function does this server-side too (idempotent via
+    // merge); doing it here as well means auth works even before Functions are
+    // deployed (e.g. on the Spark plan).
+    _ensureProfile();
+  }
 
   final FirebaseFirestore _db;
   final FirebaseStorage _storage;
   final FirebaseFunctions _functions;
+  final String? _displayName;
+  final String? _email;
+  final String? _avatarUrl;
+
+  Future<void> _ensureProfile() async {
+    if (currentUserId.isEmpty) return;
+    try {
+      final doc = await _userDoc.get();
+      if (!doc.exists) {
+        await _userDoc.set({
+          'name': _displayName ??
+              (_email != null ? _email.split('@').first : 'Student'),
+          'email': _email,
+          'avatar_url': _avatarUrl,
+          'is_ib': false,
+          'settings': const <String, dynamic>{},
+          'created_at': DateTime.now().toUtc().toIso8601String(),
+        }, SetOptions(merge: true));
+      }
+    } catch (_) {/* rules or network; profile will be retried next launch */}
+  }
 
   @override
   final String currentUserId;
