@@ -18,9 +18,18 @@ export function oauthConfig(provider: string): OAuthProviderConfig | null {
         tokenUrl: `${base}/login/oauth2/token`,
         clientId: process.env.CANVAS_CLIENT_ID ?? "",
         clientSecret: process.env.CANVAS_CLIENT_SECRET ?? "",
+        // Read-only: courses, assignments (with nested submission), submissions.
+        // Keep write/submit scopes OUT — students complete work in Canvas itself.
         scopes:
-          "url:GET|/api/v1/courses url:GET|/api/v1/announcements " +
-          "url:GET|/api/v1/users/self/assignments url:GET|/api/v1/calendar_events",
+          "url:GET|/api/v1/courses " +
+          "url:GET|/api/v1/courses/:course_id/assignments " +
+          "url:GET|/api/v1/courses/:course_id/assignments/:id " +
+          "url:GET|/api/v1/courses/:course_id/assignments/:id/submissions " +
+          "url:GET|/api/v1/courses/:course_id/assignments/:id/submissions/:id " +
+          "url:GET|/api/v1/courses/:course_id/students/submissions " +
+          "url:GET|/api/v1/announcements " +
+          "url:GET|/api/v1/users/self/assignments " +
+          "url:GET|/api/v1/calendar_events",
       };
     }
     case "groupme":

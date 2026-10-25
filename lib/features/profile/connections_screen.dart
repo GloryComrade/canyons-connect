@@ -224,7 +224,12 @@ class _CredentialSheetState extends State<_CredentialSheet> {
   ({String labelA, String labelB, bool obscureB, bool showB}) get _spec {
     switch (widget.provider) {
       case IntegrationProvider.skyward:
-        return (labelA: 'Skyward username', labelB: 'Password', obscureB: true, showB: true);
+        return (
+          labelA: 'Student ID / Skyward username',
+          labelB: 'Password',
+          obscureB: true,
+          showB: true
+        );
       case IntegrationProvider.managebac:
         return (labelA: 'ManageBac email (or ICS URL)', labelB: 'Password', obscureB: true, showB: true);
       case IntegrationProvider.parentsquare:

@@ -1,0 +1,18 @@
+{
+  "periods": [
+    { "period": "1", "period_index": 0, "class_name": "AP Calculus BC", "room": "214", "teacher": "Ms. Chen", "day_type": "regular" },
+    { "period": "2", "period_index": 1, "class_name": "AP Chemistry", "room": "118", "teacher": "Dr. Reyes", "day_type": "regular" },
+    { "period": "3", "period_index": 2, "class_name": "AP English Lit", "room": "231", "teacher": "Mr. Hart", "day_type": "regular" },
+    { "period": "4", "period_index": 3, "class_name": "US History", "room": "105", "teacher": "Ms. Okafor", "day_type": "regular" },
+    { "period": "5", "period_index": 4, "class_name": "Spanish IV", "room": "140", "teacher": "Sr. Vargas", "day_type": "regular" },
+    { "period": "6", "period_index": 5, "class_name": "Advisory", "room": "120", "teacher": "Ms. Carter", "day_type": "regular" },
+    { "period": "7", "period_index": 6, "class_name": "PE / Athletics", "room": "Gym", "teacher": "Coach Lee", "day_type": "regular" }
+  ],
+  "grades": [
+    { "course": "AP Calculus BC", "term": "Q1", "grade": "A-", "school_year": "2025-26", "percent": 91.2, "teacher": "Ms. Chen" },
+    { "course": "AP Chemistry", "term": "Q1", "grade": "B+", "school_year": "2025-26", "percent": 88.4, "teacher": "Dr. Reyes" },
+    { "course": "AP English Lit", "term": "Q1", "grade": "A", "school_year": "2025-26", "percent": 94.0, "teacher": "Mr. Hart" },
+    { "course": "US History", "term": "Q1", "grade": "A-", "school_year": "2025-26", "percent": 90.1, "teacher": "Ms. Okafor" },
+    { "course": "Spanish IV", "term": "Q1", "grade": "B", "school_year": "2025-26", "percent": 84.5, "teacher": "Sr. Vargas" }
+  ]
+}

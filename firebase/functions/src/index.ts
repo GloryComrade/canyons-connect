@@ -221,6 +221,41 @@ export const syncScheduled = functions.pubsub.schedule("every 1 minutes").onRun(
 });
 
 // ---------------------------------------------------------------------------
+// Club cover: joined members upload to Storage, then this sets clubs.cover_url.
+// ---------------------------------------------------------------------------
+export const setClubCover = functions.https.onCall(async (data, context) => {
+  const uid = context.auth?.uid;
+  if (!uid) throw new functions.https.HttpsError("unauthenticated", "sign in required");
+  const clubId = String(data?.clubId ?? "");
+  const storagePath = String(data?.storagePath ?? "");
+  if (!clubId || !storagePath.startsWith(`club-assets/${clubId}/`)) {
+    throw new functions.https.HttpsError("invalid-argument", "clubId and storagePath required");
+  }
+
+  const membership = await db.doc(`users/${uid}/memberships/${clubId}`).get();
+  if (!membership.exists || membership.data()?.status !== "joined") {
+    throw new functions.https.HttpsError("permission-denied", "join the club to set its cover");
+  }
+
+  const bucket = admin.storage().bucket();
+  const file = bucket.file(storagePath);
+  const [exists] = await file.exists();
+  if (!exists) {
+    throw new functions.https.HttpsError("not-found", "uploaded file not found");
+  }
+
+  // Prefer a long-lived token URL so clients can load without signed-URL expiry churn.
+  await file.makePublic().catch(() => {});
+  const publicUrl = `https://storage.googleapis.com/${bucket.name}/${storagePath}`;
+
+  await db.doc(`clubs/${clubId}`).set(
+    { cover_url: publicUrl, cover_updated_at: new Date().toISOString(), cover_updated_by: uid },
+    { merge: true }
+  );
+  return { cover_url: publicUrl };
+});
+
+// ---------------------------------------------------------------------------
 // Canvas webhook (near-instant updates). Verify a shared secret.
 // ---------------------------------------------------------------------------
 export const canvasWebhook = functions.https.onRequest(async (req, res) => {

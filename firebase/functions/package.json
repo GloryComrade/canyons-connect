@@ -7,7 +7,7 @@
   },
   "main": "lib/index.js",
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && node -e \"require('fs').cpSync('src/fixtures','lib/fixtures',{recursive:true})\"",
     "serve": "npm run build && firebase emulators:start --only functions",
     "deploy": "firebase deploy --only functions"
   },
@@ -16,6 +16,7 @@
     "firebase-functions": "^5.1.1"
   },
   "devDependencies": {
+    "@types/node": "^26.6.5",
     "typescript": "^5.6.3"
   }
 }

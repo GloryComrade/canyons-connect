@@ -20,8 +20,16 @@ firebase/
                               #   disconnect, syncNow, syncScheduled, webhook, seed)
       providers.ts            # OAuth config + signed-state helpers
       crypto.ts               # AES-256-GCM credential encryption
-      sync.ts                 # per-provider sync (Canvas implemented)
+      sync.ts                 # per-provider sync (Canvas + Skyward)
+      skyward.ts              # OneRoster client + fixture schedule/grades
+      fixtures/               # skyward_sample.json (when SKYWARD_SYNC_FIXTURE=1)
 ```
+
+## Integrations notes
+
+- **Canvas:** `syncCanvas` pulls assignments with `include[]=submission`, maps submitted/graded/excused → `status: done|todo`, writes `users/{uid}/assignments/canvas_*`. Students open work in Canvas; the hub mirrors LMS completion.
+- **Skyward:** `syncSkywardData` uses OneRoster when `SKYWARD_API_BASE` is set; otherwise set `SKYWARD_SYNC_FIXTURE=1` for demo periods/grades. Respects `edited_by_user` on class periods.
+- **Club covers (Canva):** client uploads to `club-assets/{clubId}/…`, then callable `setClubCover` verifies `memberships/{clubId}.status == joined` and sets `clubs/{id}.cover_url`.
 
 ## Data model (Firestore)
 
