@@ -8,6 +8,7 @@ GroupMe, the School Clubs site, and The Utah View** into one clean dashboard.
 - **Frontend:** Flutter (one Dart codebase → Web, iOS, Android, Windows, macOS)
 - **Backend:** Firebase (Cloud Firestore + Auth + Storage + Cloud Functions)
 - **Repo:** https://github.com/GloryComrade/canyons-connect
+- **Picking up / switching computers?** Read [`docs/SESSION-HANDOFF.md`](docs/SESSION-HANDOFF.md) first.
 
 > **Runs out of the box.** With no backend configured the app boots on an
 > in-memory **mock data layer** (student "Maya Ramirez") so every screen is
