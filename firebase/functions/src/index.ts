@@ -156,6 +156,52 @@ export const connectCredentials = functions.https.onCall(async (data, context) =
 });
 
 // ---------------------------------------------------------------------------
+// Canvas personal access token (Account → Settings → New Access Token).
+// Lets a student connect their own Canvas without a district developer key.
+// The token is checked against /users/self, then stored server-side exactly
+// like an OAuth access token (no refresh token, no known expiry).
+// ---------------------------------------------------------------------------
+export const connectCanvasToken = functions.https.onCall(async (data, context) => {
+  const uid = context.auth?.uid;
+  if (!uid) throw new functions.https.HttpsError("unauthenticated", "sign in required");
+  const token = String(data?.token ?? "").trim();
+  if (!token) throw new functions.https.HttpsError("invalid-argument", "token required");
+  const base = process.env.CANVAS_BASE_URL;
+  if (!base) throw new functions.https.HttpsError("failed-precondition", "CANVAS_BASE_URL not set");
+
+  const res = await fetch(`${base}/api/v1/users/self`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (res.status === 401) {
+    throw new functions.https.HttpsError("permission-denied", "Canvas rejected that token");
+  }
+  if (!res.ok) {
+    throw new functions.https.HttpsError("unavailable", `Canvas check failed: ${res.status}`);
+  }
+  const self: any = await res.json();
+
+  await db.doc(`integration_secrets/${uid}/providers/canvas`).set({
+    access_token: token,
+    refresh_token: null,
+    expires_at: null,
+    token_type: "personal",
+    updated_at: new Date().toISOString(),
+  });
+  await markStatus(uid, "canvas", {
+    status: "connected",
+    external_account_id: self?.id != null ? String(self.id) : null,
+    expires_at: null,
+    last_synced_at: new Date().toISOString(),
+  });
+  try {
+    await syncProvider(db, uid, "canvas");
+  } catch (_e) {
+    await markStatus(uid, "canvas", { status: "needs_reconnect" });
+  }
+  return { status: "connected" };
+});
+
+// ---------------------------------------------------------------------------
 // Disconnect: remove secrets, mark not connected.
 // ---------------------------------------------------------------------------
 export const disconnectIntegration = functions.https.onCall(async (data, context) => {

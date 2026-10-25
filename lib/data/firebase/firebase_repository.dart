@@ -290,6 +290,11 @@ class FirebaseRepository implements HubRepository {
     IntegrationProvider provider, {
     Map<String, String>? credentials,
   }) async {
+    final canvasToken = credentials?['token'];
+    if (provider == IntegrationProvider.canvas && canvasToken != null && canvasToken.isNotEmpty) {
+      await _functions.httpsCallable('connectCanvasToken').call({'token': canvasToken});
+      return const ConnectResult.connected();
+    }
     if (provider.isOAuth) {
       final res = await _functions.httpsCallable('oauthStart').call({'provider': provider.db});
       final url = (res.data is Map) ? res.data['authorize_url']?.toString() : null;

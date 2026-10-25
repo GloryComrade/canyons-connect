@@ -80,7 +80,11 @@ class _ConnectionRowState extends ConsumerState<_ConnectionRow> {
   Future<void> _connect() async {
     final provider = widget.provider;
     Map<String, String>? credentials;
-    if (!provider.isOAuth) {
+    if (provider == IntegrationProvider.canvas) {
+      // Personal access token, or an empty map to fall back to district OAuth.
+      credentials = await _promptCanvasToken();
+      if (credentials == null) return; // cancelled
+    } else if (!provider.isOAuth) {
       credentials = await _promptCredentials(provider);
       if (credentials == null) return; // cancelled
     }
@@ -204,6 +208,78 @@ class _ConnectionRowState extends ConsumerState<_ConnectionRow> {
         borderRadius: BorderRadius.vertical(top: Radius.circular(Radii.md)),
       ),
       builder: (_) => _CredentialSheet(provider: provider),
+    );
+  }
+
+  Future<Map<String, String>?> _promptCanvasToken() {
+    return showModalBottomSheet<Map<String, String>>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: context.colors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(Radii.md)),
+      ),
+      builder: (_) => const _CanvasTokenSheet(),
+    );
+  }
+}
+
+/// Canvas connect: paste a personal access token, or use district OAuth.
+/// Pops `{'token': …}` for a token, `{}` for OAuth, null when cancelled.
+class _CanvasTokenSheet extends StatefulWidget {
+  const _CanvasTokenSheet();
+
+  @override
+  State<_CanvasTokenSheet> createState() => _CanvasTokenSheetState();
+}
+
+class _CanvasTokenSheetState extends State<_CanvasTokenSheet> {
+  final _token = TextEditingController();
+
+  @override
+  void dispose() {
+    _token.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    final bottom = MediaQuery.of(context).viewInsets.bottom;
+    return Padding(
+      padding: EdgeInsets.fromLTRB(Space.md, Space.md, Space.md, Space.md + bottom),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text('Connect Canvas', style: AppType.title.copyWith(color: c.textPrimary)),
+          Space.vXs,
+          Text(
+            'In Canvas, open Account → Settings → New Access Token, then paste it here. '
+            'It is stored on the server only and never saved on this device.',
+            style: AppType.body.copyWith(color: c.textTertiary),
+          ),
+          Space.vMd,
+          _Field(controller: _token, label: 'Canvas access token', obscure: true),
+          Space.vLg,
+          AppButton(
+            label: 'Connect',
+            fullWidth: true,
+            onPressed: () {
+              final token = _token.text.trim();
+              if (token.isEmpty) return;
+              Navigator.pop(context, {'token': token});
+            },
+          ),
+          Space.vSm,
+          AppButton.tertiary(
+            label: 'Use school Canvas sign-in instead',
+            fullWidth: true,
+            onPressed: () => Navigator.pop(context, <String, String>{}),
+          ),
+          AppButton.tertiary(label: 'Cancel', fullWidth: true, onPressed: () => Navigator.pop(context)),
+        ],
+      ),
     );
   }
 }
