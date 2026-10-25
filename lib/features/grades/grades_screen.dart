@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/utils/date_format.dart';
 import '../../data/providers.dart';
 import '../../design_system/ds.dart';
 import '../../models/models.dart';
+import '../../widgets/assignment_tile.dart';
 
 class GradesScreen extends ConsumerWidget {
   const GradesScreen({super.key});
@@ -161,23 +163,15 @@ class _GradeExpandableState extends State<_GradeExpandable> {
                         style: AppType.body.copyWith(color: c.textTertiary))
                   else
                     for (final a in widget.courseAssignments)
-                      Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 6),
-                        child: Row(
-                          children: [
-                            Icon(
-                              a.isDone ? Icons.check_circle : Icons.radio_button_unchecked,
-                              size: 18,
-                              color: a.isDone ? c.success : c.textTertiary,
-                            ),
-                            Space.hSm,
-                            Expanded(child: Text(a.title, style: AppType.body.copyWith(color: c.textPrimary))),
-                            Text(
-                              a.isOverdue ? 'Overdue' : Dates.relativeDay(a.dueAt),
-                              style: AppType.body.copyWith(color: a.isOverdue ? c.danger : c.textTertiary),
-                            ),
-                          ],
-                        ),
+                      AssignmentTile(
+                        assignment: a,
+                        showDay: true,
+                        onOpenCanvas: a.url != null
+                            ? () => launchUrl(
+                                  Uri.parse(a.url!),
+                                  mode: LaunchMode.externalApplication,
+                                )
+                            : null,
                       ),
                   Padding(
                     padding: const EdgeInsets.only(top: Space.sm),

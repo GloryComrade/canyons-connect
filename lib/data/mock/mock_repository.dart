@@ -183,6 +183,29 @@ class MockRepository implements HubRepository {
     }
   }
 
+  @override
+  Future<void> setClubCover(String clubId, Uint8List bytes) async {
+    await Future.delayed(const Duration(milliseconds: 400));
+    final seed = clubId.hashCode.abs() % 1000;
+    final url = 'https://picsum.photos/seed/club$seed/800/400';
+    _clubs.update((list) => [
+          for (final c in list)
+            if (c.id == clubId)
+              Club(
+                id: c.id,
+                name: c.name,
+                category: c.category,
+                description: c.description,
+                meetingInfo: c.meetingInfo,
+                coverUrl: url,
+                memberCount: c.memberCount,
+                advisor: c.advisor,
+              )
+            else
+              c
+        ]);
+  }
+
   // ---- Integrations ----
   @override
   Stream<List<Integration>> watchIntegrations() => _integrations.stream;

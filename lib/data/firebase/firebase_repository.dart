@@ -206,6 +206,17 @@ class FirebaseRepository implements HubRepository {
     });
   }
 
+  @override
+  Future<void> setClubCover(String clubId, Uint8List bytes) async {
+    final path =
+        'club-assets/$clubId/${currentUserId}_${DateTime.now().millisecondsSinceEpoch}.jpg';
+    await _storage.ref(path).putData(bytes, SettableMetadata(contentType: 'image/jpeg'));
+    await _functions.httpsCallable('setClubCover').call({
+      'clubId': clubId,
+      'storagePath': path,
+    });
+  }
+
   // ---- Photo Drop ----
   @override
   Future<List<PhotoEvent>> getPhotoEvents() async {

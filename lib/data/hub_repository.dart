@@ -49,6 +49,10 @@ abstract class HubRepository {
   Stream<List<ClubMembership>> watchMemberships();
   Future<void> setMembership(String clubId, MembershipStatus? status);
 
+  /// Upload a club banner/cover image (e.g. Canva export). Server verifies the
+  /// caller has joined the club, then sets `clubs/{id}.cover_url`.
+  Future<void> setClubCover(String clubId, Uint8List bytes);
+
   // ---- Photo Drop ----
   Future<List<PhotoEvent>> getPhotoEvents();
   Future<List<Photo>> getPhotos(String eventId);
@@ -59,7 +63,7 @@ abstract class HubRepository {
 
   /// Begin linking a provider. For OAuth providers this returns an authorize
   /// URL the client opens; for credential providers [credentials] are sent to
-  /// an Edge Function and stored encrypted server-side (never in the client).
+  /// a Cloud Function and stored encrypted server-side (never in the client).
   Future<ConnectResult> connect(
     IntegrationProvider provider, {
     Map<String, String>? credentials,

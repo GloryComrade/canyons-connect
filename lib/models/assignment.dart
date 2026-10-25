@@ -1,8 +1,10 @@
 import '../core/utils/parsing.dart';
 import 'enums.dart';
 
-/// A merged homework/IB task from Canvas or ManageBac. Local [status] lets the
-/// student check items done without round-tripping to the source LMS.
+/// A merged homework/IB task from Canvas or ManageBac.
+///
+/// For Canvas, [status] mirrors the LMS submission state (synced; read-only in
+/// the app). ManageBac may later support a local toggle via [status].
 class Assignment {
   const Assignment({
     required this.id,

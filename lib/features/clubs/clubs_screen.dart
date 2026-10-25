@@ -1,6 +1,10 @@
+import 'dart:typed_data';
+
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../data/providers.dart';
 import '../../design_system/ds.dart';
@@ -67,6 +71,11 @@ class _ClubsScreenState extends ConsumerState<ClubsScreen> {
                     Space.vLg,
                     if (joined.isNotEmpty) ...[
                       Text('Your clubs', style: AppType.title.copyWith(color: c.textPrimary)),
+                      Space.vXs,
+                      Text(
+                        'Design banners in Canva, download as PNG/JPG, then Import design.',
+                        style: AppType.body.copyWith(color: c.textTertiary),
+                      ),
                       Space.vSm,
                       for (final club in joined)
                         _ClubCard(
@@ -75,6 +84,11 @@ class _ClubsScreenState extends ConsumerState<ClubsScreen> {
                           onJoin: () => ref.read(repositoryProvider).setMembership(club.id, MembershipStatus.joined),
                           onLeave: () => ref.read(repositoryProvider).setMembership(club.id, null),
                           onInterested: () => ref.read(repositoryProvider).setMembership(club.id, MembershipStatus.interested),
+                          onOpenCanva: () => launchUrl(
+                            Uri.parse('https://www.canva.com'),
+                            mode: LaunchMode.externalApplication,
+                          ),
+                          onImportDesign: () => _importDesign(club.id),
                         ),
                       Space.vLg,
                     ],
@@ -106,6 +120,24 @@ class _ClubsScreenState extends ConsumerState<ClubsScreen> {
       ),
     );
   }
+
+  Future<void> _importDesign(String clubId) async {
+    final picker = ImagePicker();
+    final file = await picker.pickImage(source: ImageSource.gallery, imageQuality: 85);
+    if (file == null) return;
+    final bytes = await file.readAsBytes();
+    if (!mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.showSnackBar(const SnackBar(content: Text('Uploading design…')));
+    try {
+      await ref.read(repositoryProvider).setClubCover(clubId, Uint8List.fromList(bytes));
+      messenger.hideCurrentSnackBar();
+      messenger.showSnackBar(const SnackBar(content: Text('Club banner updated.')));
+    } catch (e) {
+      messenger.hideCurrentSnackBar();
+      messenger.showSnackBar(SnackBar(content: Text('Could not import: $e')));
+    }
+  }
 }
 
 class _ClubCard extends StatelessWidget {
@@ -115,6 +147,8 @@ class _ClubCard extends StatelessWidget {
     required this.onJoin,
     required this.onLeave,
     required this.onInterested,
+    this.onOpenCanva,
+    this.onImportDesign,
   });
 
   final Club club;
@@ -122,12 +156,15 @@ class _ClubCard extends StatelessWidget {
   final VoidCallback onJoin;
   final VoidCallback onLeave;
   final VoidCallback onInterested;
+  final VoidCallback? onOpenCanva;
+  final VoidCallback? onImportDesign;
 
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
     final joined = status == MembershipStatus.joined;
     final interested = status == MembershipStatus.interested;
+    final showDesignActions = joined && onOpenCanva != null && onImportDesign != null;
 
     return Container(
       margin: const EdgeInsets.only(bottom: Space.md),
@@ -162,6 +199,18 @@ class _ClubCard extends StatelessWidget {
                   children: [
                     Expanded(child: Text(club.name, style: AppType.subtitle.copyWith(color: c.textPrimary))),
                     AppChip(label: club.category, tone: ChipTone.neutral),
+                    if (showDesignActions)
+                      PopupMenuButton<String>(
+                        icon: Icon(Icons.more_vert, color: c.textSecondary),
+                        onSelected: (value) {
+                          if (value == 'canva') onOpenCanva!();
+                          if (value == 'import') onImportDesign!();
+                        },
+                        itemBuilder: (_) => const [
+                          PopupMenuItem(value: 'canva', child: Text('Open Canva')),
+                          PopupMenuItem(value: 'import', child: Text('Import design')),
+                        ],
+                      ),
                   ],
                 ),
                 if (club.description != null) ...[
@@ -202,6 +251,27 @@ class _ClubCard extends StatelessWidget {
                       ),
                   ],
                 ),
+                if (showDesignActions) ...[
+                  Space.vSm,
+                  Wrap(
+                    spacing: Space.sm,
+                    runSpacing: Space.xs,
+                    children: [
+                      AppButton.tertiary(
+                        label: 'Open Canva',
+                        icon: Icons.open_in_new,
+                        size: AppButtonSize.small,
+                        onPressed: onOpenCanva,
+                      ),
+                      AppButton.tertiary(
+                        label: 'Import design',
+                        icon: Icons.image_outlined,
+                        size: AppButtonSize.small,
+                        onPressed: onImportDesign,
+                      ),
+                    ],
+                  ),
+                ],
               ],
             ),
           ),
