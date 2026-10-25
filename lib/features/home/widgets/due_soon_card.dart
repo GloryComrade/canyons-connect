@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/router/routes.dart';
 import '../../../core/utils/date_format.dart';
@@ -21,6 +22,10 @@ class DueSoonCard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final c = context.colors;
     final async = ref.watch(assignmentsProvider);
+    final integrations = ref.watch(integrationsProvider).value ?? const <Integration>[];
+    final canvasConnected = integrations.any(
+      (i) => i.provider == IntegrationProvider.canvas && i.isConnected,
+    );
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -39,6 +44,17 @@ class DueSoonCard extends ConsumerWidget {
             ),
             error: (e, _) => const ErrorStateView(compact: true, message: 'Could not load assignments.'),
             data: (all) {
+              if (all.isEmpty && !canvasConnected) {
+                return EmptyState(
+                  compact: true,
+                  icon: Icons.link_off_outlined,
+                  title: 'Connect Canvas',
+                  message: 'Link Canvas to see homework due soon.',
+                  actionLabel: 'Connect',
+                  onAction: () => context.push(Routes.connections),
+                );
+              }
+
               final pending = all.where((a) => !a.isDone).toList()
                 ..sort((a, b) => a.dueAt.compareTo(b.dueAt));
               if (pending.isEmpty) {
@@ -71,11 +87,7 @@ class DueSoonCard extends ConsumerWidget {
                 ));
                 for (final a in items) {
                   if (count >= maxItems) break;
-                  children.add(AssignmentTile(
-                    assignment: a,
-                    onToggle: (done) => ref.read(repositoryProvider).setAssignmentStatus(
-                        a.id, done ? AssignmentStatus.done : AssignmentStatus.todo),
-                  ));
+                  children.add(_tileFor(ref, a));
                   count++;
                 }
                 if (count >= maxItems) break;
@@ -85,6 +97,22 @@ class DueSoonCard extends ConsumerWidget {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _tileFor(WidgetRef ref, Assignment a) {
+    final isCanvas = a.source == AssignmentSource.canvas;
+    return AssignmentTile(
+      assignment: a,
+      onOpenCanvas: isCanvas && a.url != null
+          ? () => launchUrl(Uri.parse(a.url!), mode: LaunchMode.externalApplication)
+          : null,
+      onToggle: isCanvas
+          ? null
+          : (done) => ref.read(repositoryProvider).setAssignmentStatus(
+                a.id,
+                done ? AssignmentStatus.done : AssignmentStatus.todo,
+              ),
     );
   }
 }

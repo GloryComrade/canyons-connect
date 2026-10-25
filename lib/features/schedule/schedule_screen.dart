@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/utils/date_format.dart';
 import '../../data/providers.dart';
 import '../../design_system/ds.dart';
 import '../../models/models.dart';
+import '../../widgets/assignment_tile.dart';
 import 'bell_schedule.dart';
 import 'widgets/edit_class_sheet.dart';
 
@@ -281,19 +283,21 @@ class _AgendaItem {
         title = e.title,
         source = e.source.label,
         icon = _eventIcon(e.type),
-        isAssignment = false;
+        assignment = null;
   _AgendaItem.assignment(Assignment a)
       : time = a.dueAt,
         title = a.title,
         source = a.isIbTask ? 'IB · ${a.course}' : a.course,
         icon = Icons.assignment_outlined,
-        isAssignment = true;
+        assignment = a;
 
   final DateTime time;
   final String title;
   final String source;
   final IconData icon;
-  final bool isAssignment;
+  final Assignment? assignment;
+
+  bool get isAssignment => assignment != null;
 
   static IconData _eventIcon(String type) => switch (type) {
         'club_meeting' => Icons.groups_outlined,
@@ -305,12 +309,29 @@ class _AgendaItem {
       };
 }
 
-class _AgendaRow extends StatelessWidget {
+class _AgendaRow extends ConsumerWidget {
   const _AgendaRow({required this.item});
   final _AgendaItem item;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final a = item.assignment;
+    if (a != null) {
+      final isCanvas = a.source == AssignmentSource.canvas;
+      return AssignmentTile(
+        assignment: a,
+        onOpenCanvas: isCanvas && a.url != null
+            ? () => launchUrl(Uri.parse(a.url!), mode: LaunchMode.externalApplication)
+            : null,
+        onToggle: isCanvas
+            ? null
+            : (done) => ref.read(repositoryProvider).setAssignmentStatus(
+                  a.id,
+                  done ? AssignmentStatus.done : AssignmentStatus.todo,
+                ),
+      );
+    }
+
     final c = context.colors;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: Space.sm),
@@ -330,7 +351,7 @@ class _AgendaRow extends StatelessWidget {
           ),
           Space.hSm,
           Text(
-            item.isAssignment ? 'Due ${Dates.time(item.time)}' : Dates.time(item.time),
+            Dates.time(item.time),
             style: AppType.body.copyWith(color: c.textSecondary),
           ),
         ],
