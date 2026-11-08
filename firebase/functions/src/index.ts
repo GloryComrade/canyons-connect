@@ -242,6 +242,19 @@ export const syncNow = functions.https.onCall(async (data, context) => {
   return { synced: results };
 });
 
+/**
+ * Grades and schedules change a few times a day at most. When the real
+ * district API is configured, poll it no more than every
+ * SKYWARD_POLL_MINUTES (default 60) per student so we stay a polite client.
+ * Pull-to-refresh (syncNow) is not throttled.
+ */
+function skywardPollDue(lastSyncedAt: unknown): boolean {
+  if (!process.env.SKYWARD_API_BASE) return true; // fixture mode: cheap
+  const minutes = Number(process.env.SKYWARD_POLL_MINUTES ?? 60);
+  const last = typeof lastSyncedAt === "string" ? Date.parse(lastSyncedAt) : NaN;
+  return Number.isNaN(last) || Date.now() - last >= minutes * 60_000;
+}
+
 // ---------------------------------------------------------------------------
 // Scheduled poll (every 1 minute) for providers without webhooks.
 // ---------------------------------------------------------------------------
@@ -255,6 +268,7 @@ export const syncScheduled = functions.pubsub.schedule("every 1 minutes").onRun(
     if (!POLL_PROVIDERS.includes(provider)) continue;
     const uid = doc.ref.parent.parent?.id;
     if (!uid) continue;
+    if (provider === "skyward" && !skywardPollDue(doc.data()?.last_synced_at)) continue;
     try {
       await syncProvider(db, uid, provider);
       await markStatus(uid, provider, { last_synced_at: new Date().toISOString() });

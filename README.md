@@ -117,7 +117,7 @@ server-only `integration_secrets` collection and refreshes before each sync.
 | Provider | Link method | Pulls |
 |----------|-------------|-------|
 | Canvas | OAuth2 (district developer key) | assignments, announcements, due dates |
-| Skyward | District API if granted, else encrypted login sync | **class schedule**, current grades, attendance (no GPA) |
+| Skyward | District OneRoster API (ready, awaiting district approval; see `docs/SKYWARD.md`) | **class schedule**, current grades, attendance (no GPA) |
 | ManageBac | API if available, else login / ICS | IB deadlines, IAs, CAS |
 | GroupMe | OAuth2 | group messages → Inbox |
 | ParentSquare | Feed/scrape | posts → Inbox |

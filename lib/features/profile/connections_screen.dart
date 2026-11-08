@@ -300,11 +300,13 @@ class _CredentialSheetState extends State<_CredentialSheet> {
   ({String labelA, String labelB, bool obscureB, bool showB}) get _spec {
     switch (widget.provider) {
       case IntegrationProvider.skyward:
+        // The district OneRoster API looks students up by ID; no Skyward
+        // password is needed, so we don't ask for (or store) one.
         return (
-          labelA: 'Student ID / Skyward username',
-          labelB: 'Password',
-          obscureB: true,
-          showB: true
+          labelA: 'Student number (optional, we match your district email)',
+          labelB: '',
+          obscureB: false,
+          showB: false
         );
       case IntegrationProvider.managebac:
         return (labelA: 'ManageBac email (or ICS URL)', labelB: 'Password', obscureB: true, showB: true);

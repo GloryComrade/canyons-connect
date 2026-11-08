@@ -29,7 +29,7 @@ firebase/
 
 - **Canvas (no developer key):** students can paste a Canvas personal access token (Account → Settings → New Access Token). The `connectCanvasToken` callable checks it against `/api/v1/users/self`, stores it in `integration_secrets`, and syncs right away. Uses `CANVAS_BASE_URL`; when the token expires, the integration flips to `needs_reconnect`.
 - **Canvas:** `syncCanvas` pulls assignments with `include[]=submission`, maps submitted/graded/excused → `status: done|todo`, writes `users/{uid}/assignments/canvas_*`. Students open work in Canvas; the hub mirrors LMS completion.
-- **Skyward:** `syncSkywardData` uses OneRoster when `SKYWARD_API_BASE` is set; otherwise set `SKYWARD_SYNC_FIXTURE=1` for demo periods/grades. Respects `edited_by_user` on class periods.
+- **Skyward:** `syncSkywardData` uses the district OneRoster 1.1 API (`oneroster.ts`, OAuth2 client credentials) when `SKYWARD_API_BASE` is set; otherwise set `SKYWARD_SYNC_FIXTURE=1` for demo periods/grades. Only syncs the record whose email matches the signed-in user. Respects `edited_by_user` on class periods. See `docs/SKYWARD.md`.
 - **Club covers (Canva):** client uploads to `club-assets/{clubId}/…`, then callable `setClubCover` verifies `memberships/{clubId}.status == joined` and sets `clubs/{id}.cover_url`.
 
 ## Data model (Firestore)
