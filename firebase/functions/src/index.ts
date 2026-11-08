@@ -157,9 +157,9 @@ export const connectCredentials = functions.https.onCall(async (data, context) =
 
 // ---------------------------------------------------------------------------
 // Canvas personal access token (Account → Settings → New Access Token).
-// Lets a student connect their own Canvas without a district developer key.
-// The token is checked against /users/self, then stored server-side exactly
-// like an OAuth access token (no refresh token, no known expiry).
+// Blaze / Functions path: validates against /users/self, stores server-side
+// only (never logged / never in status docs). App default on Spark uses
+// client-side sync instead; enable with --dart-define=CANVAS_VIA_FUNCTIONS=true.
 // ---------------------------------------------------------------------------
 export const connectCanvasToken = functions.https.onCall(async (data, context) => {
   const uid = context.auth?.uid;

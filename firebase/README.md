@@ -17,7 +17,8 @@ firebase/
     env.example               # secrets template → copy to .env (gitignored)
     src/
       index.ts                # all functions (auth trigger, OAuth, connect,
-                              #   disconnect, syncNow, syncScheduled, webhook, seed)
+                              #   connectCanvasToken, disconnect, syncNow,
+                              #   syncScheduled, webhook, seed)
       providers.ts            # OAuth config + signed-state helpers
       crypto.ts               # AES-256-GCM credential encryption
       sync.ts                 # per-provider sync (Canvas + Skyward)
@@ -29,6 +30,8 @@ firebase/
 
 - **Canvas (no developer key):** students can paste a Canvas personal access token (Account → Settings → New Access Token). The `connectCanvasToken` callable checks it against `/api/v1/users/self`, stores it in `integration_secrets`, and syncs right away. Uses `CANVAS_BASE_URL`; when the token expires, the integration flips to `needs_reconnect`.
 - **Canvas:** `syncCanvas` pulls assignments with `include[]=submission`, maps submitted/graded/excused → `status: done|todo`, writes `users/{uid}/assignments/canvas_*`. Students open work in Canvas; the hub mirrors LMS completion.
+  - **Personal access token — client-side demo (Spark default):** Flutter holds the PAT in **process memory only** (`CanvasTokenStore`), calls Canvas REST from the device, and writes assignment + status docs as the signed-in user. The token is **never** written to Firestore (not in `users/.../integrations`, not in `integration_secrets`). Re-paste after app restart. Use a **desktop or mobile** target (not Chrome) so Canvas CORS does not block requests. Toggle later with `--dart-define=CANVAS_VIA_FUNCTIONS=true`.
+  - **Personal access token — Cloud Functions (Blaze, kept for later):** callable `connectCanvasToken` accepts `{ token }`, writes `integration_secrets/{uid}/providers/canvas` (`access_token`, `refresh_token: null`, `expires_at: null`), marks status connected, fire-and-forgets `syncProvider(..., "canvas")`. PATs are **not** `CANVAS_CLIENT_SECRET`.
 - **Skyward:** `syncSkywardData` uses OneRoster when `SKYWARD_API_BASE` is set; otherwise set `SKYWARD_SYNC_FIXTURE=1` for demo periods/grades. Respects `edited_by_user` on class periods.
 - **Club covers (Canva):** client uploads to `club-assets/{clubId}/…`, then callable `setClubCover` verifies `memberships/{clubId}.status == joined` and sets `clubs/{id}.cover_url`.
 

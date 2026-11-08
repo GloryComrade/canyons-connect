@@ -1,5 +1,6 @@
 # Project-level configuration.
-cmake_minimum_required(VERSION 3.14)
+# Firebase C++ SDK (FlutterFire) requires CMake >= 3.22.
+cmake_minimum_required(VERSION 3.22)
 project(canyons_connect LANGUAGES CXX)
 
 # The name of the executable created for the application. Change this to change
@@ -8,7 +9,7 @@ set(BINARY_NAME "canyons_connect")
 
 # Explicitly opt in to modern CMake behaviors to avoid warnings with recent
 # versions of CMake.
-cmake_policy(VERSION 3.14...3.25)
+cmake_policy(VERSION 3.22...4.4)
 
 # Define build configuration option.
 get_property(IS_MULTICONFIG GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)
@@ -39,7 +40,11 @@ add_definitions(-DUNICODE -D_UNICODE)
 # of modifying this function.
 function(APPLY_STANDARD_SETTINGS TARGET)
   target_compile_features(${TARGET} PUBLIC cxx_std_17)
-  target_compile_options(${TARGET} PRIVATE /W4 /WX /wd"4100")
+  # /wd4996: Firebase C++ SDK headers still use strncpy; MSVC C4996 would
+  # otherwise fail the build because plugins compile with /WX.
+  # Do not define _CRT_SECURE_NO_WARNINGS here — firebase_storage already does,
+  # and a redefinition becomes C4005 → error under /WX.
+  target_compile_options(${TARGET} PRIVATE /W4 /WX /wd"4100" /wd"4996")
   target_compile_options(${TARGET} PRIVATE /EHsc)
   target_compile_definitions(${TARGET} PRIVATE "_HAS_EXCEPTIONS=0")
   target_compile_definitions(${TARGET} PRIVATE "$<$<CONFIG:Debug>:_DEBUG>")

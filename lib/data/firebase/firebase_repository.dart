@@ -6,7 +6,10 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 
+import '../../core/config/app_config.dart';
 import '../../models/models.dart';
+import '../canvas/canvas_client_sync.dart';
+import '../canvas/canvas_token_store.dart';
 import '../hub_repository.dart';
 
 /// Live [HubRepository] backed by Firebase: Cloud Firestore (data + realtime),
@@ -289,10 +292,19 @@ class FirebaseRepository implements HubRepository {
   Future<ConnectResult> connect(
     IntegrationProvider provider, {
     Map<String, String>? credentials,
+    String? accessToken,
   }) async {
-    final canvasToken = credentials?['token'];
-    if (provider == IntegrationProvider.canvas && canvasToken != null && canvasToken.isNotEmpty) {
-      await _functions.httpsCallable('connectCanvasToken').call({'token': canvasToken});
+    // Canvas personal access token.
+    if (provider == IntegrationProvider.canvas && accessToken != null) {
+      final token = accessToken.trim();
+      if (token.isEmpty) {
+        throw ArgumentError('Canvas access token is required');
+      }
+      if (AppConfig.useClientSideCanvas) {
+        return _connectCanvasClientSide(token);
+      }
+      // Blaze path: Cloud Function stores token in integration_secrets only.
+      await _functions.httpsCallable('connectCanvasToken').call({'token': token});
       return const ConnectResult.connected();
     }
     if (provider.isOAuth) {
@@ -308,13 +320,84 @@ class FirebaseRepository implements HubRepository {
     return const ConnectResult.connected();
   }
 
+  /// Spark-compatible demo: token stays in [CanvasTokenStore] (memory only),
+  /// status + assignments are written as the signed-in user. Never persists
+  /// the PAT to Firestore.
+  Future<ConnectResult> _connectCanvasClientSide(String token) async {
+    CanvasTokenStore.instance.setToken(token);
+    final now = DateTime.now().toUtc().toIso8601String();
+    await _userCol('integrations').doc('canvas').set({
+      'provider': 'canvas',
+      'status': 'connected',
+      'last_synced_at': now,
+      // Intentionally omit access_token / refresh_token / expires_at secrets.
+    }, SetOptions(merge: true));
+    try {
+      await CanvasClientSync(db: _db).sync(
+        uid: currentUserId,
+        accessToken: token,
+      );
+    } catch (_) {
+      await _userCol('integrations').doc('canvas').set({
+        'status': 'needs_reconnect',
+      }, SetOptions(merge: true));
+      // Rethrow a safe message — never include the token.
+      throw StateError(
+        'Canvas sync failed. Check the access token and network, then try again.',
+      );
+    }
+    return const ConnectResult.connected();
+  }
+
   @override
   Future<void> disconnect(IntegrationProvider provider) async {
+    if (provider == IntegrationProvider.canvas && AppConfig.useClientSideCanvas) {
+      CanvasTokenStore.instance.clear();
+      await _userCol('integrations').doc('canvas').set({
+        'provider': 'canvas',
+        'status': 'not_connected',
+        'external_account_id': null,
+        'expires_at': null,
+      }, SetOptions(merge: true));
+      return;
+    }
     await _functions.httpsCallable('disconnectIntegration').call({'provider': provider.db});
   }
 
   @override
   Future<void> sync({IntegrationProvider? provider}) async {
+    final wantsCanvas =
+        provider == null || provider == IntegrationProvider.canvas;
+
+    if (AppConfig.useClientSideCanvas && wantsCanvas) {
+      if (!CanvasTokenStore.instance.hasToken) {
+        if (provider == IntegrationProvider.canvas) {
+          throw StateError(
+            'Canvas token is only kept for this session. '
+            'Reconnect with your access token.',
+          );
+        }
+        // Full sync on Spark with no session token: nothing to do for Canvas.
+      } else {
+        try {
+          await CanvasClientSync(db: _db).sync(
+            uid: currentUserId,
+            accessToken: CanvasTokenStore.instance.token!,
+          );
+        } catch (_) {
+          await _userCol('integrations').doc('canvas').set({
+            'status': 'needs_reconnect',
+          }, SetOptions(merge: true));
+          throw StateError(
+            'Canvas sync failed. Reconnect with a fresh access token.',
+          );
+        }
+      }
+      // Other providers still need Cloud Functions — skip on client-side demo.
+      return;
+    }
+
+    // Blaze / Functions path (kept for later).
     await _functions.httpsCallable('syncNow').call({
       if (provider != null) 'provider': provider.db,
     });

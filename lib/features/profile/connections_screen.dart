@@ -77,20 +77,24 @@ class _ConnectionRowState extends ConsumerState<_ConnectionRow> {
   IntegrationStatus get _status =>
       widget.integration?.status ?? IntegrationStatus.notConnected;
 
-  Future<void> _connect() async {
+  Future<void> _connect({bool canvasAccessToken = false}) async {
     final provider = widget.provider;
     Map<String, String>? credentials;
-    if (provider == IntegrationProvider.canvas) {
-      // Personal access token, or an empty map to fall back to district OAuth.
-      credentials = await _promptCanvasToken();
-      if (credentials == null) return; // cancelled
+    String? accessToken;
+    if (provider == IntegrationProvider.canvas && canvasAccessToken) {
+      accessToken = await _promptCanvasToken();
+      if (accessToken == null) return; // cancelled
     } else if (!provider.isOAuth) {
       credentials = await _promptCredentials(provider);
       if (credentials == null) return; // cancelled
     }
     setState(() => _busy = true);
     try {
-      final result = await ref.read(repositoryProvider).connect(provider, credentials: credentials);
+      final result = await ref.read(repositoryProvider).connect(
+            provider,
+            credentials: credentials,
+            accessToken: accessToken,
+          );
       if (result.authorizeUrl != null) {
         await launchUrl(Uri.parse(result.authorizeUrl!), mode: LaunchMode.externalApplication);
       }
@@ -156,7 +160,11 @@ class _ConnectionRowState extends ConsumerState<_ConnectionRow> {
                     Text(widget.provider.label, style: AppType.subtitle.copyWith(color: c.textPrimary)),
                     const SizedBox(height: 2),
                     Text(
-                      widget.provider.isOAuth ? 'Links with OAuth' : 'Links with a secure login',
+                      widget.provider == IntegrationProvider.canvas
+                          ? 'Access token or district OAuth'
+                          : widget.provider.isOAuth
+                              ? 'Links with OAuth'
+                              : 'Links with a secure login',
                       style: AppType.body.copyWith(color: c.textTertiary),
                     ),
                   ],
@@ -185,17 +193,51 @@ class _ConnectionRowState extends ConsumerState<_ConnectionRow> {
                   destructive: true,
                   onPressed: _busy ? null : _disconnect,
                 ),
-              ] else
+              ] else if (widget.provider == IntegrationProvider.canvas)
+                Expanded(
+                  child: Wrap(
+                    spacing: Space.sm,
+                    runSpacing: Space.sm,
+                    children: [
+                      AppButton(
+                        label: needsReconnect
+                            ? 'Reconnect with token'
+                            : 'Connect with access token',
+                        size: AppButtonSize.small,
+                        loading: _busy,
+                        onPressed: _busy ? null : () => _connect(canvasAccessToken: true),
+                      ),
+                      AppButton.tertiary(
+                        label: 'Connect with OAuth',
+                        size: AppButtonSize.small,
+                        onPressed: _busy ? null : () => _connect(),
+                      ),
+                    ],
+                  ),
+                )
+              else
                 AppButton(
                   label: needsReconnect ? 'Reconnect' : 'Connect',
                   size: AppButtonSize.small,
                   loading: _busy,
-                  onPressed: _busy ? null : _connect,
+                  onPressed: _busy ? null : () => _connect(),
                 ),
             ],
           ),
         ],
       ),
+    );
+  }
+
+  Future<String?> _promptCanvasToken() {
+    return showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: context.colors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(Radii.md)),
+      ),
+      builder: (_) => const _CanvasTokenSheet(),
     );
   }
 
@@ -210,22 +252,9 @@ class _ConnectionRowState extends ConsumerState<_ConnectionRow> {
       builder: (_) => _CredentialSheet(provider: provider),
     );
   }
-
-  Future<Map<String, String>?> _promptCanvasToken() {
-    return showModalBottomSheet<Map<String, String>>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: context.colors.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(Radii.md)),
-      ),
-      builder: (_) => const _CanvasTokenSheet(),
-    );
-  }
 }
 
-/// Canvas connect: paste a personal access token, or use district OAuth.
-/// Pops `{'token': …}` for a token, `{}` for OAuth, null when cancelled.
+/// Paste a Canvas personal access token (demo path without district OAuth).
 class _CanvasTokenSheet extends StatefulWidget {
   const _CanvasTokenSheet();
 
@@ -255,12 +284,13 @@ class _CanvasTokenSheetState extends State<_CanvasTokenSheet> {
           Text('Connect Canvas', style: AppType.title.copyWith(color: c.textPrimary)),
           Space.vXs,
           Text(
-            'In Canvas, open Account → Settings → New Access Token, then paste it here. '
-            'It is stored on the server only and never saved on this device.',
+            'Paste a Canvas personal access token. It stays in memory for this '
+            'session only — never written to Firestore or disk. After you quit '
+            'the app, reconnect to sync again.',
             style: AppType.body.copyWith(color: c.textTertiary),
           ),
           Space.vMd,
-          _Field(controller: _token, label: 'Canvas access token', obscure: true),
+          _Field(controller: _token, label: 'Personal access token', obscure: true),
           Space.vLg,
           AppButton(
             label: 'Connect',
@@ -268,15 +298,10 @@ class _CanvasTokenSheetState extends State<_CanvasTokenSheet> {
             onPressed: () {
               final token = _token.text.trim();
               if (token.isEmpty) return;
-              Navigator.pop(context, {'token': token});
+              Navigator.pop(context, token);
             },
           ),
           Space.vSm,
-          AppButton.tertiary(
-            label: 'Use school Canvas sign-in instead',
-            fullWidth: true,
-            onPressed: () => Navigator.pop(context, <String, String>{}),
-          ),
           AppButton.tertiary(label: 'Cancel', fullWidth: true, onPressed: () => Navigator.pop(context)),
         ],
       ),

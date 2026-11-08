@@ -8,6 +8,11 @@
 /// `main()` sets [firebaseInitialized] to true only after a successful
 /// `Firebase.initializeApp`. Set `--dart-define=USE_MOCK_DATA=true` to force
 /// mock mode even when Firebase is configured.
+///
+/// Canvas personal-access-token linking defaults to a **client-side demo sync**
+/// (Spark-compatible; token never written to Firestore). Set
+/// `--dart-define=CANVAS_VIA_FUNCTIONS=true` after upgrading to Blaze to use
+/// the existing `connectCanvasToken` / `syncNow` Cloud Functions path instead.
 library;
 
 class AppConfig {
@@ -24,4 +29,21 @@ class AppConfig {
   /// Whether to use the mock data layer. Mock is used when forced, or whenever
   /// Firebase isn't configured / failed to initialize.
   static bool get useMockData => forceMock || !firebaseInitialized;
+
+  /// When true, Canvas PAT connect/sync goes through Cloud Functions
+  /// (`connectCanvasToken`, `syncNow`). Requires Blaze. Default false =
+  /// client-side demo path (token held in memory only).
+  static const bool canvasViaFunctions =
+      bool.fromEnvironment('CANVAS_VIA_FUNCTIONS', defaultValue: false);
+
+  /// Canvas instance base URL (no trailing slash). Override with
+  /// `--dart-define=CANVAS_BASE_URL=https://...` if needed.
+  static const String canvasBaseUrl = String.fromEnvironment(
+    'CANVAS_BASE_URL',
+    defaultValue: 'https://canyons.instructure.com',
+  );
+
+  /// Client-side Canvas PAT sync (Spark / early demo). Inverse of
+  /// [canvasViaFunctions].
+  static bool get useClientSideCanvas => !canvasViaFunctions;
 }

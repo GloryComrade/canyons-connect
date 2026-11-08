@@ -25,13 +25,19 @@ flutter pub get
 # Run in demo/mock mode (no backend needed):
 flutter run -d chrome          # or: macos / windows / ios / android
 
+# Live Firebase + Canvas PAT (Spark-friendly client sync — use desktop/mobile,
+# not Chrome, so Canvas CORS does not block). Token stays in memory only:
+flutter run -d windows
+# Optional: --dart-define=CANVAS_VIA_FUNCTIONS=true  # after Blaze + deploy
+
 # Connect a real Firebase project, then just run normally:
 #   npm install -g firebase-tools && dart pub global activate flutterfire_cli
 #   firebase login && flutterfire configure
-#   flutter run -d chrome
+#   flutter run -d windows
 ```
 
 See **[SETUP.md](SETUP.md)** for the full go-live walkthrough (one script).
+Canvas PAT on Spark: see **Client-side Canvas** note in [`firebase/README.md`](firebase/README.md).
 
 ### Build for each platform
 

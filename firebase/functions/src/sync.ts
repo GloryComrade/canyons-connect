@@ -33,7 +33,11 @@ export async function syncProvider(db: DB, uid: string, provider: string) {
   }
 }
 
-/** Refresh access token when expires_at is missing, past, or within 5 minutes. */
+/**
+ * Refresh access token when expires_at is past or within 5 minutes.
+ * Personal access tokens have no refresh_token and usually no expires_at —
+ * those are returned as-is for Bearer use.
+ */
 async function ensureCanvasToken(
   db: DB,
   uid: string,
@@ -45,6 +49,7 @@ async function ensureCanvasToken(
   const expiresAt = secret.expires_at ? Date.parse(secret.expires_at) : NaN;
   const knownExpiry = Number.isFinite(expiresAt);
   const nearOrPast = knownExpiry && expiresAt <= Date.now() + 5 * 60 * 1000;
+  // No known expiry (e.g. personal access token) → use token directly.
   if (!nearOrPast) return secret.access_token;
   if (!secret.refresh_token) {
     if (knownExpiry && expiresAt <= Date.now()) {

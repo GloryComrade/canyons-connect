@@ -64,9 +64,14 @@ abstract class HubRepository {
   /// Begin linking a provider. For OAuth providers this returns an authorize
   /// URL the client opens; for credential providers [credentials] are sent to
   /// a Cloud Function and stored encrypted server-side (never in the client).
+  /// For Canvas, pass [accessToken] for a personal access token. By default
+  /// (Spark demo) the token stays in memory and sync runs on-device; with
+  /// `CANVAS_VIA_FUNCTIONS=true` it is sent to `connectCanvasToken` instead.
+  /// Never persisted to Firestore from the client.
   Future<ConnectResult> connect(
     IntegrationProvider provider, {
     Map<String, String>? credentials,
+    String? accessToken,
   });
   Future<void> disconnect(IntegrationProvider provider);
 
