@@ -1,38 +1,18 @@
-// Skyward OneRoster REST client + schedule/grades mapping into Firestore.
-// When SKYWARD_API_BASE is unset and SKYWARD_SYNC_FIXTURE=1, uses a local
-// fixture so Schedule/Grades can be demoed without district credentials.
+// Skyward schedule/grades sync into Firestore.
+// Real data comes from the district's OneRoster 1.1 API (see oneroster.ts and
+// docs/SKYWARD.md). When SKYWARD_API_BASE is unset and SKYWARD_SYNC_FIXTURE=1,
+// a local fixture is used so Schedule/Grades can be demoed without access.
+import * as admin from "firebase-admin";
 import type { firestore } from "firebase-admin";
 import * as fs from "fs";
 import * as path from "path";
+import { OneRosterClient, configFromEnv, type SkywardPayload } from "./oneroster";
 
 type DB = firestore.Firestore;
 
 export interface SkywardCreds {
   account?: string;
   secret?: string;
-}
-
-interface PeriodRow {
-  period: string;
-  period_index: number;
-  class_name: string;
-  room?: string | null;
-  teacher?: string | null;
-  day_type?: string;
-}
-
-interface GradeRow {
-  course: string;
-  term: string;
-  grade: string;
-  school_year: string;
-  percent?: number | null;
-  teacher?: string | null;
-}
-
-interface SkywardPayload {
-  periods: PeriodRow[];
-  grades: GradeRow[];
 }
 
 function fixtureEnabled(): boolean {
@@ -68,146 +48,6 @@ function loadFixture(): SkywardPayload {
       { course: "Spanish IV", term: "Q1", grade: "B", school_year: "2025-26", percent: 84.5, teacher: "Sr. Vargas" },
     ],
   };
-}
-
-async function oneRosterFetch(url: string, headers: Record<string, string>): Promise<any> {
-  const res = await fetch(url, { headers });
-  if (!res.ok) throw new Error(`skyward fetch failed: ${res.status} ${url}`);
-  return res.json();
-}
-
-/** Authenticate against district OneRoster (API key or basic). */
-async function fetchFromApi(creds: SkywardCreds): Promise<SkywardPayload> {
-  const base = (process.env.SKYWARD_API_BASE ?? "").replace(/\/$/, "");
-  const apiKey = process.env.SKYWARD_API_KEY ?? "";
-  if (!base) throw new Error("SKYWARD_API_BASE not set");
-
-  const headers: Record<string, string> = {
-    Accept: "application/json",
-  };
-  if (apiKey) {
-    headers.Authorization = `Bearer ${apiKey}`;
-  }
-
-  const studentKey = (creds.account ?? "").trim();
-  if (!studentKey) throw new Error("skyward student account required");
-
-  // OneRoster 1.1 style paths (Qmlativ / SMS). Districts vary; adjust filters as needed.
-  const students = await oneRosterFetch(
-    `${base}/ims/oneroster/v1p1/students?filter=sourcedId='${encodeURIComponent(studentKey)}'%20OR%20identifier='${encodeURIComponent(studentKey)}'&limit=5`,
-    headers
-  ).catch(async () =>
-    oneRosterFetch(`${base}/ims/oneroster/v1p1/students/${encodeURIComponent(studentKey)}`, headers)
-  );
-
-  const student =
-    students?.user ??
-    students?.student ??
-    (Array.isArray(students?.users) ? students.users[0] : null) ??
-    (Array.isArray(students) ? students[0] : students);
-  const sourcedId = student?.sourcedId ?? student?.sourced_id ?? studentKey;
-  if (!sourcedId) throw new Error("skyward student not found");
-
-  const enrollmentsPayload = await oneRosterFetch(
-    `${base}/ims/oneroster/v1p1/enrollments?filter=user.sourcedId='${encodeURIComponent(sourcedId)}'&limit=100`,
-    headers
-  ).catch(() =>
-    oneRosterFetch(
-      `${base}/ims/oneroster/v1p1/students/${encodeURIComponent(sourcedId)}/classes`,
-      headers
-    )
-  );
-
-  const enrollments: any[] =
-    enrollmentsPayload?.enrollments ??
-    enrollmentsPayload?.classes ??
-    (Array.isArray(enrollmentsPayload) ? enrollmentsPayload : []);
-
-  const periods: PeriodRow[] = [];
-  const grades: GradeRow[] = [];
-  const year = currentSchoolYear();
-  let index = 0;
-
-  for (const e of enrollments) {
-    const classHref = e?.class?.href ?? e?.class?.sourcedId ?? e?.sourcedId;
-    let cls = e?.class ?? e;
-    if (typeof classHref === "string" && classHref.startsWith("http")) {
-      cls = await oneRosterFetch(classHref, headers).catch(() => cls);
-      cls = cls?.class ?? cls;
-    } else if (typeof classHref === "string" && !cls?.title) {
-      cls = await oneRosterFetch(
-        `${base}/ims/oneroster/v1p1/classes/${encodeURIComponent(classHref)}`,
-        headers
-      ).catch(() => cls);
-      cls = cls?.class ?? cls;
-    }
-
-    const className = cls?.title ?? cls?.classCode ?? cls?.name ?? `Class ${index + 1}`;
-    const periodLabel =
-      String(cls?.periods?.[0] ?? cls?.period ?? e?.metadata?.period ?? index + 1);
-    const room = cls?.location ?? cls?.metadata?.room ?? null;
-    const teacher =
-      cls?.teachers?.[0]?.name ??
-      cls?.metadata?.teacher ??
-      e?.metadata?.teacher ??
-      null;
-
-    periods.push({
-      period: periodLabel,
-      period_index: index,
-      class_name: className,
-      room,
-      teacher,
-      day_type: "regular",
-    });
-
-    // Results / lineItems vary widely; try a common pattern then skip.
-    const classId = cls?.sourcedId ?? classHref;
-    if (classId && typeof classId === "string" && !classId.startsWith("http")) {
-      const results = await oneRosterFetch(
-        `${base}/ims/oneroster/v1p1/classes/${encodeURIComponent(classId)}/students/${encodeURIComponent(sourcedId)}/results`,
-        headers
-      ).catch(() => null);
-      const list: any[] = results?.results ?? (Array.isArray(results) ? results : []);
-      const latest = list[0];
-      if (latest) {
-        const score = latest.score != null ? Number(latest.score) : null;
-        grades.push({
-          course: className,
-          term: latest.metadata?.term ?? "Current",
-          grade: String(latest.scoreStatus ?? latest.metadata?.letter ?? letterFromPercent(score)),
-          school_year: year,
-          percent: score,
-          teacher,
-        });
-      }
-    }
-    index += 1;
-  }
-
-  if (!periods.length) throw new Error("skyward returned no classes for student");
-  return { periods, grades };
-}
-
-function currentSchoolYear(): string {
-  const now = new Date();
-  const y = now.getFullYear();
-  const start = now.getMonth() >= 6 ? y : y - 1;
-  return `${start}-${String(start + 1).slice(2)}`;
-}
-
-function letterFromPercent(p: number | null): string {
-  if (p == null || Number.isNaN(p)) return "—";
-  if (p >= 93) return "A";
-  if (p >= 90) return "A-";
-  if (p >= 87) return "B+";
-  if (p >= 83) return "B";
-  if (p >= 80) return "B-";
-  if (p >= 77) return "C+";
-  if (p >= 73) return "C";
-  if (p >= 70) return "C-";
-  if (p >= 60) return "D";
-  return "F";
 }
 
 async function writeScheduleAndGrades(db: DB, uid: string, payload: SkywardPayload) {
@@ -274,6 +114,27 @@ async function writeScheduleAndGrades(db: DB, uid: string, payload: SkywardPaylo
     ops += 1;
     await flush();
   }
+
+  // Drop Skyward rows that this sync no longer returned (e.g. leftover sample
+  // data after switching to the real API, or a dropped class). Rows the
+  // student edited by hand are kept.
+  const keepPeriods = new Set(payload.periods.map((p) => `skyward_p${p.period_index}`));
+  for (const d of existing.docs) {
+    if (d.id.startsWith("skyward_") && !keepPeriods.has(d.id) && !edited.has(d.id)) {
+      batch.delete(d.ref);
+      ops += 1;
+      await flush();
+    }
+  }
+  const keepGrades = new Set(payload.grades.map((g, i) => `skyward_g${i}_${slug(g.course)}`));
+  const existingGrades = await gradesCol.get();
+  for (const d of existingGrades.docs) {
+    if (d.id.startsWith("skyward_") && !keepGrades.has(d.id)) {
+      batch.delete(d.ref);
+      ops += 1;
+      await flush();
+    }
+  }
   await flush(true);
 }
 
@@ -282,21 +143,26 @@ function slug(s: string): string {
 }
 
 export async function syncSkywardData(db: DB, uid: string, creds: SkywardCreds) {
-  const base = process.env.SKYWARD_API_BASE ?? "";
+  const cfg = configFromEnv();
   let payload: SkywardPayload;
-  if (!base && fixtureEnabled()) {
+  if (!cfg && fixtureEnabled()) {
     payload = loadFixture();
-  } else if (!base) {
+  } else if (!cfg) {
     throw new Error("SKYWARD_API_BASE not set (set SKYWARD_SYNC_FIXTURE=1 for demo data)");
   } else {
     try {
-      payload = await fetchFromApi(creds);
-    } catch (e) {
-      if (fixtureEnabled()) {
-        payload = loadFixture();
-      } else {
-        throw e;
+      const user = await admin.auth().getUser(uid);
+      if (!user.email || !user.emailVerified) {
+        throw new Error("skyward: sign in with your verified district account first");
       }
+      payload = await new OneRosterClient(cfg).fetchStudentData(creds.account ?? "", {
+        expectedEmail: user.email,
+      });
+    } catch (e) {
+      // Never paper over an ownership failure with sample data.
+      if (!fixtureEnabled() || (e as { status?: number }).status === 403) throw e;
+      console.warn("skyward: OneRoster failed, using fixture", (e as Error).message);
+      payload = loadFixture();
     }
   }
   await writeScheduleAndGrades(db, uid, payload);

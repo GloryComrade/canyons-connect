@@ -9,7 +9,9 @@
   "scripts": {
     "build": "tsc && node -e \"require('fs').cpSync('src/fixtures','lib/fixtures',{recursive:true})\"",
     "serve": "npm run build && firebase emulators:start --only functions",
-    "deploy": "firebase deploy --only functions"
+    "deploy": "firebase deploy --only functions",
+    "test": "npm run build && node --test lib/*.test.js",
+    "skyward:probe": "npm run build && node lib/tools/skywardProbe.js"
   },
   "dependencies": {
     "firebase-admin": "^12.7.0",
