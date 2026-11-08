@@ -77,16 +77,24 @@ class _ConnectionRowState extends ConsumerState<_ConnectionRow> {
   IntegrationStatus get _status =>
       widget.integration?.status ?? IntegrationStatus.notConnected;
 
-  Future<void> _connect() async {
+  Future<void> _connect({bool canvasAccessToken = false}) async {
     final provider = widget.provider;
     Map<String, String>? credentials;
-    if (!provider.isOAuth) {
+    String? accessToken;
+    if (provider == IntegrationProvider.canvas && canvasAccessToken) {
+      accessToken = await _promptCanvasToken();
+      if (accessToken == null) return; // cancelled
+    } else if (!provider.isOAuth) {
       credentials = await _promptCredentials(provider);
       if (credentials == null) return; // cancelled
     }
     setState(() => _busy = true);
     try {
-      final result = await ref.read(repositoryProvider).connect(provider, credentials: credentials);
+      final result = await ref.read(repositoryProvider).connect(
+            provider,
+            credentials: credentials,
+            accessToken: accessToken,
+          );
       if (result.authorizeUrl != null) {
         await launchUrl(Uri.parse(result.authorizeUrl!), mode: LaunchMode.externalApplication);
       }
@@ -152,7 +160,11 @@ class _ConnectionRowState extends ConsumerState<_ConnectionRow> {
                     Text(widget.provider.label, style: AppType.subtitle.copyWith(color: c.textPrimary)),
                     const SizedBox(height: 2),
                     Text(
-                      widget.provider.isOAuth ? 'Links with OAuth' : 'Links with a secure login',
+                      widget.provider == IntegrationProvider.canvas
+                          ? 'Access token or district OAuth'
+                          : widget.provider.isOAuth
+                              ? 'Links with OAuth'
+                              : 'Links with a secure login',
                       style: AppType.body.copyWith(color: c.textTertiary),
                     ),
                   ],
@@ -181,17 +193,51 @@ class _ConnectionRowState extends ConsumerState<_ConnectionRow> {
                   destructive: true,
                   onPressed: _busy ? null : _disconnect,
                 ),
-              ] else
+              ] else if (widget.provider == IntegrationProvider.canvas)
+                Expanded(
+                  child: Wrap(
+                    spacing: Space.sm,
+                    runSpacing: Space.sm,
+                    children: [
+                      AppButton(
+                        label: needsReconnect
+                            ? 'Reconnect with token'
+                            : 'Connect with access token',
+                        size: AppButtonSize.small,
+                        loading: _busy,
+                        onPressed: _busy ? null : () => _connect(canvasAccessToken: true),
+                      ),
+                      AppButton.tertiary(
+                        label: 'Connect with OAuth',
+                        size: AppButtonSize.small,
+                        onPressed: _busy ? null : () => _connect(),
+                      ),
+                    ],
+                  ),
+                )
+              else
                 AppButton(
                   label: needsReconnect ? 'Reconnect' : 'Connect',
                   size: AppButtonSize.small,
                   loading: _busy,
-                  onPressed: _busy ? null : _connect,
+                  onPressed: _busy ? null : () => _connect(),
                 ),
             ],
           ),
         ],
       ),
+    );
+  }
+
+  Future<String?> _promptCanvasToken() {
+    return showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: context.colors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(Radii.md)),
+      ),
+      builder: (_) => const _CanvasTokenSheet(),
     );
   }
 
@@ -204,6 +250,61 @@ class _ConnectionRowState extends ConsumerState<_ConnectionRow> {
         borderRadius: BorderRadius.vertical(top: Radius.circular(Radii.md)),
       ),
       builder: (_) => _CredentialSheet(provider: provider),
+    );
+  }
+}
+
+/// Paste a Canvas personal access token (demo path without district OAuth).
+class _CanvasTokenSheet extends StatefulWidget {
+  const _CanvasTokenSheet();
+
+  @override
+  State<_CanvasTokenSheet> createState() => _CanvasTokenSheetState();
+}
+
+class _CanvasTokenSheetState extends State<_CanvasTokenSheet> {
+  final _token = TextEditingController();
+
+  @override
+  void dispose() {
+    _token.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    final bottom = MediaQuery.of(context).viewInsets.bottom;
+    return Padding(
+      padding: EdgeInsets.fromLTRB(Space.md, Space.md, Space.md, Space.md + bottom),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text('Connect Canvas', style: AppType.title.copyWith(color: c.textPrimary)),
+          Space.vXs,
+          Text(
+            'Paste a Canvas personal access token. It stays in memory for this '
+            'session only — never written to Firestore or disk. After you quit '
+            'the app, reconnect to sync again.',
+            style: AppType.body.copyWith(color: c.textTertiary),
+          ),
+          Space.vMd,
+          _Field(controller: _token, label: 'Personal access token', obscure: true),
+          Space.vLg,
+          AppButton(
+            label: 'Connect',
+            fullWidth: true,
+            onPressed: () {
+              final token = _token.text.trim();
+              if (token.isEmpty) return;
+              Navigator.pop(context, token);
+            },
+          ),
+          Space.vSm,
+          AppButton.tertiary(label: 'Cancel', fullWidth: true, onPressed: () => Navigator.pop(context)),
+        ],
+      ),
     );
   }
 }

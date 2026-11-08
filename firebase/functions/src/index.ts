@@ -156,6 +156,33 @@ export const connectCredentials = functions.https.onCall(async (data, context) =
 });
 
 // ---------------------------------------------------------------------------
+// Canvas personal access token (demo / no district OAuth developer key).
+// Token is stored server-side only — never logged, never written to status docs.
+// ---------------------------------------------------------------------------
+export const connectCanvasToken = functions.https.onCall(async (data, context) => {
+  const uid = context.auth?.uid;
+  if (!uid) throw new functions.https.HttpsError("unauthenticated", "sign in required");
+  const token = String(data?.token ?? "").trim();
+  if (!token) {
+    throw new functions.https.HttpsError("invalid-argument", "token required");
+  }
+
+  await db.doc(`integration_secrets/${uid}/providers/canvas`).set({
+    access_token: token,
+    refresh_token: null,
+    expires_at: null,
+    updated_at: new Date().toISOString(),
+  });
+  await markStatus(uid, "canvas", {
+    status: "connected",
+    expires_at: null,
+    last_synced_at: new Date().toISOString(),
+  });
+  syncProvider(db, uid, "canvas").catch(() => {});
+  return { status: "connected" };
+});
+
+// ---------------------------------------------------------------------------
 // Disconnect: remove secrets, mark not connected.
 // ---------------------------------------------------------------------------
 export const disconnectIntegration = functions.https.onCall(async (data, context) => {

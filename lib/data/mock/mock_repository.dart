@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import '../../models/models.dart';
+import '../canvas/canvas_token_store.dart';
 import '../hub_repository.dart';
 import 'reactive_store.dart';
 import 'sample_data.dart';
@@ -214,14 +215,25 @@ class MockRepository implements HubRepository {
   Future<ConnectResult> connect(
     IntegrationProvider provider, {
     Map<String, String>? credentials,
+    String? accessToken,
   }) async {
     await Future.delayed(const Duration(milliseconds: 600));
+    // Canvas PAT path: accept any non-empty token and mark connected without
+    // storing the token (mock has no secrets store).
+    if (provider == IntegrationProvider.canvas && accessToken != null) {
+      if (accessToken.trim().isEmpty) {
+        throw ArgumentError('Canvas access token is required');
+      }
+    }
     _integrations.update((list) => [
           for (final i in list)
             if (i.provider == provider)
               i.copyWith(
                 status: IntegrationStatus.connected,
                 lastSyncedAt: DateTime.now(),
+                detail: provider == IntegrationProvider.canvas && accessToken != null
+                    ? 'Connected with access token'
+                    : i.detail,
               )
             else
               i
@@ -235,6 +247,9 @@ class MockRepository implements HubRepository {
               provider: provider,
               status: IntegrationStatus.connected,
               lastSyncedAt: DateTime.now(),
+              detail: provider == IntegrationProvider.canvas && accessToken != null
+                  ? 'Connected with access token'
+                  : null,
             ),
           ]);
     }
@@ -243,6 +258,9 @@ class MockRepository implements HubRepository {
 
   @override
   Future<void> disconnect(IntegrationProvider provider) async {
+    if (provider == IntegrationProvider.canvas) {
+      CanvasTokenStore.instance.clear();
+    }
     _integrations.update((list) => [
           for (final i in list)
             if (i.provider == provider)
